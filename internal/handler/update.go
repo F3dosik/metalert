@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	// "log"
 	"net/http"
 	"strings"
 
@@ -56,7 +58,7 @@ func update(w http.ResponseWriter, r *http.Request, storage *repository.MemStora
 		http.Error(w, errInvalidURL.Error(), http.StatusBadRequest)
 		return
 	}
-
+	// log.Printf("Принята метрика %s %s = %s", metType, metName, metValue)
 	val, err := service.CheckURL(metType, metName, metValue)
 	if err != nil {
 		switch {

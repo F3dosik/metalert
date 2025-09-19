@@ -2,19 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
 
-	"github.com/F3dosik/metalert.git/internal/handler"
-	"github.com/F3dosik/metalert.git/internal/repository"
+	"github.com/F3dosik/metalert.git/internal/server"
 )
 
 func main() {
-	storage := repository.NewMemStorage()
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/update/", handler.UpdateHandler(storage))
-
-	if err := http.ListenAndServe(`:8080`, mux); err != nil {
+	if err := server.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}
 }
