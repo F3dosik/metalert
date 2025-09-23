@@ -2,26 +2,26 @@ package agent
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"net/url"
-	"path"
 	"strconv"
 	"time"
 
 	models "github.com/F3dosik/metalert.git/internal/model"
+	"github.com/go-resty/resty/v2"
 )
 
 type Sender struct {
 	ServerURL string
-	Client    *http.Client
+	Client    *resty.Client
 }
 
 func NewSender(serverURL string) *Sender {
+	client := resty.New()
+	client.SetTimeout(5 * time.Second)
 	return &Sender{
 		ServerURL: serverURL,
-		Client:    &http.Client{},
+		Client:    client,
 	}
 }
 
@@ -29,61 +29,51 @@ func (s *Sender) SendMetrics(metrics *Metrics) {
 	metrics.mu.RLock()
 	defer metrics.mu.RUnlock()
 
-	client := &http.Client{Timeout: 5 * time.Second}
-
 	// Отправка gauge метрик
-	metricType := models.GaugeType
+	metricType := models.MetricTypeGauge
 	for metricName, val := range metrics.Gauges {
 		metricValue := strconv.FormatFloat(float64(val), 'f', -1, 64)
 
-		err := s.sendMetric(client, metricType, metricName, metricValue)
+		err := s.sendMetric(metricType, metricName, metricValue)
 		if err != nil {
 			log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
 		}
 	}
 
 	// Отправка counter метрик
-	metricType = models.CounterType
+	metricType = models.MetricTypeCounter
 	for metricName, val := range metrics.Counters {
 		metricValue := fmt.Sprint(val)
 
-		err := s.sendMetric(client, metricType, metricName, metricValue)
+		err := s.sendMetric(metricType, metricName, metricValue)
 		if err != nil {
 			log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
 		}
 	}
 }
 
-func (s *Sender) sendMetric(client *http.Client, metricType, metricName, metricValue string) error {
-	baseURL, _ := url.Parse(s.ServerURL)
-	baseURL.Path = path.Join(baseURL.Path, "update", metricType, url.PathEscape(metricName), metricValue)
-	fullURL := baseURL.String()
+func (s *Sender) sendMetric(metricType, metricName, metricValue string) error {
+	fullURL := s.ServerURL + "/update/{metType}/{metName}/{metValue}"
 
-	req, err := http.NewRequest(http.MethodPost, fullURL, nil)
-	fmt.Println(fullURL)
-	if err != nil {
-	
-		return fmt.Errorf("ошибка создания запроса: %w", err)
-	}
-	req.Header.Set("Content-Type", "text/plain")
+	// log.Printf("Отправка метрики: %s %s=%s", metricType, metricName, metricValue)
 
-	resp, err := client.Do(req)
+	resp, err := s.Client.R().
+		SetPathParams(map[string]string{
+			"metType":  metricType,
+			"metName":  metricName,
+			"metValue": metricValue,
+		}).
+		SetHeader("Content-Type", "text/plain").
+		Post(fullURL)
+
 	if err != nil {
 		return fmt.Errorf("ошибка выполнения запроса: %w", err)
 	}
-	log.Printf("-> Отправляю %s %s=%s", metricType, metricName, metricValue)
 
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("неожиданный статус код: %d", resp.StatusCode)
+	if resp.StatusCode() != http.StatusOK {
+		return fmt.Errorf("неожиданный статус код: %d", resp.StatusCode())
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("ошибка чтения ответа: %w", err)
-	}
-
-	log.Printf("Метрика %s успешно отправлена. Ответ: %s", metricName, string(body))
+	log.Printf("Метрика %s успешно отправлена. Ответ: %s", metricName, resp.Body()) // Или использовать resp.String и проверять ошибку
 	return nil
 }

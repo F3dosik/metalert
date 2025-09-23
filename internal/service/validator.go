@@ -6,53 +6,75 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 
 	models "github.com/F3dosik/metalert.git/internal/model"
 )
 
 var (
-	ErrInvalidType = errors.New("error: unknown metric type")
+	ErrInvalidType = errors.New("некорректный тип метрики")
 	ErrNoName      = errors.New("error: metric name not provided")
 	ErrInvalidVal  = errors.New("error: invalid value for")
 )
 
-func CheckURL(mT, mN, mV string) (any, error) {
-	switch mT {
-	case models.GaugeType:
-		if err := checkName(mN); err != nil {
-			return nil, err
-		}
-		return checkGauge(mV)
-	case models.CounterType:
-		if err := checkName(mN); err != nil {
-			return nil, err
-		}
-		return checkCounter(mV)
+func CheckAndParseValue(metType, metName, metValue string) (any, error) {
+	log.Printf("CheckAndParseValue: type=%s, name=%s, value=%s", metType, metName, metValue)
+	if err := ValidateMetricType(metType); err != nil {
+		// log.Printf("ValidateMetricType failed: %v", err)
+		return nil, err
+	}
+
+	if err := validateMetricName(metName); err != nil {
+		// log.Printf("validateMetricName failed: %v", err)
+		return nil, err
+	}
+
+	switch metType {
+	case models.MetricTypeGauge:
+		value, err := parseGaugeValue(metValue)
+		// log.Printf("parseGaugeValue result: %v, error: %v", value, err)
+		return value, err
+	case models.MetricTypeCounter:
+		value, err := parseCounterValue(metValue)
+		// log.Printf("parseCounterValue result: %v, error: %v", value, err)
+		return value, err
 	default:
+		// log.Printf("Unknown metric type: %s", metType)
 		return nil, ErrInvalidType
 	}
 }
 
-func checkName(mN string) error {
-	if mN == "" {
+func ValidateMetricType(metType string) error {
+	// log.Printf("ValidateMetricType: %s", metType)
+	if !models.IsValidMetricType(metType) {
+		return ErrInvalidType
+	}
+	return nil
+}
+
+func validateMetricName(metName string) error {
+	// log.Printf("validateMetricName: %s", metName)
+	if metName == "" {
 		return ErrNoName
 	}
 	return nil
 }
 
-func checkGauge(s string) (models.Gauge, error) {
-	f, err := strconv.ParseFloat(s, 64)
+func parseGaugeValue(metValue string) (models.Gauge, error) {
+	// log.Printf("parseCounterValue: %s", metValue)
+	f, err := strconv.ParseFloat(metValue, 64)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidVal, s)
+		return 0, fmt.Errorf("%w: %s", ErrInvalidVal, metValue)
 	}
 	return models.Gauge(f), nil
 }
 
-func checkCounter(s string) (models.Counter, error) {
-	i, err := strconv.ParseInt(s, 10, 64)
+func parseCounterValue(metValue string) (models.Counter, error) {
+	// log.Printf("parseGaugeValue: %s", metValue)
+	i, err := strconv.ParseInt(metValue, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidVal, s)
+		return 0, fmt.Errorf("%w: %s", ErrInvalidVal, metValue)
 	}
 	return models.Counter(i), nil
 }

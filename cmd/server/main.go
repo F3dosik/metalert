@@ -3,11 +3,14 @@ package main
 import (
 	"log"
 
+	"github.com/F3dosik/metalert.git/internal/config"
 	"github.com/F3dosik/metalert.git/internal/server"
 )
 
+
 func main() {
-	if err := server.Run(":8080"); err != nil {
+	port := config.DefaultPort()
+	if err := server.Run(port); err != nil {
 		log.Fatal(err)
 	}
 }

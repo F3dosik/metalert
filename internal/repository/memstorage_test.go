@@ -39,7 +39,7 @@ func TestUpdateGauge(t *testing.T) {
 				storage.Gauges[k] = v
 			}
 
-			storage.UpdateGauge(tt.metricName, tt.metricValue)
+			storage.SetGauge(tt.metricName, tt.metricValue)
 
 			if got := storage.Gauges[tt.metricName]; got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)

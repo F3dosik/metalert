@@ -7,9 +7,14 @@ type Gauge float64
 type Counter int64
 
 const (
-	CounterType = "counter"
-	GaugeType   = "gauge"
+	MetricTypeCounter = "counter"
+	MetricTypeGauge   = "gauge"
 )
+
+var ValidMetricTypes = map[string]bool{
+	MetricTypeCounter: true,
+	MetricTypeGauge:   true,
+}
 
 // Metrics NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
@@ -19,7 +24,11 @@ const (
 type Metrics struct {
 	ID    string   `json:"id"`
 	MType string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"`
-	Value *float64 `json:"value,omitempty"`
+	Delta *Counter `json:"delta,omitempty"` // для counter
+	Value *Gauge   `json:"value,omitempty"` // для gauge
 	Hash  string   `json:"hash,omitempty"`
+}
+
+func IsValidMetricType(metType string) bool {
+	return ValidMetricTypes[metType]
 }
