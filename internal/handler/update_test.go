@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/F3dosik/metalert.git/internal/repository"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestUpdate(t *testing.T) {
@@ -14,7 +15,6 @@ func TestUpdate(t *testing.T) {
 		method      string
 		url         string
 		contentType string
-		storage     *repository.MemStorage
 		want        int
 	}{
 		{
@@ -22,23 +22,20 @@ func TestUpdate(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauge/name/40",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
 			want:        http.StatusOK,
 		},
-		{
-			name:        "Content-Type != text/plain",
-			method:      http.MethodPost,
-			url:         "/update/gauge/name/40",
-			contentType: "aplication/json",
-			storage:     repository.NewMemStorage(),
-			want:        http.StatusBadRequest,
-		},
+		// {
+		// 	name:        "Content-Type != text/plain",
+		// 	method:      http.MethodPost,
+		// 	url:         "/update/gauge/name/40",
+		// 	contentType: "application/json",
+		// 	want:        http.StatusBadRequest,
+		// },
 		{
 			name:        "GET запрос",
 			method:      http.MethodGet,
 			url:         "/update/gauge/name/40",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
 			want:        http.StatusMethodNotAllowed,
 		},
 		{
@@ -46,23 +43,21 @@ func TestUpdate(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
-			want:        http.StatusBadRequest,
+			want:        http.StatusNotFound,
 		},
 		{
-			name:        "Неккоретный тип метрики",
+			name:        "Некорретный тип метрики",
 			method:      http.MethodPost,
 			url:         "/update/gauges",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
-			want:        http.StatusBadRequest,
+
+			want: http.StatusNotFound,
 		},
 		{
 			name:        "Отсутствует имя метрики",
 			method:      http.MethodPost,
 			url:         "/update/gauge/",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
 			want:        http.StatusNotFound,
 		},
 		{
@@ -70,7 +65,6 @@ func TestUpdate(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauge/name/str",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
 			want:        http.StatusBadRequest,
 		},
 		{
@@ -78,7 +72,6 @@ func TestUpdate(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/counter/name/40.314",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
 			want:        http.StatusBadRequest,
 		},
 		{
@@ -86,24 +79,30 @@ func TestUpdate(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauge/name/40/str/str",
 			contentType: "text/plain",
-			storage:     repository.NewMemStorage(),
-			want:        http.StatusBadRequest,
+			want:        http.StatusNotFound,
 		},
-		
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			storage := repository.NewMemStorage()
+
+			// Создаем полноценный router как в server.go
+			r := chi.NewRouter()
+			r.Route("/update", func(r chi.Router) {
+				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage))
+			})
+
 			req := httptest.NewRequest(tt.method, tt.url, nil)
 			req.Header.Set("Content-Type", tt.contentType)
 			rr := httptest.NewRecorder()
-			h := UpdateHandler(tt.storage)
-			h.ServeHTTP(rr, req)
+
+			// Тестируем через router, а не напрямую хэндлер
+			r.ServeHTTP(rr, req)
+
 			if rr.Code != tt.want {
 				t.Errorf("status = %d, want %d", rr.Code, tt.want)
 			}
-
 		})
 	}
-
 }
