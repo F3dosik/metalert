@@ -6,18 +6,16 @@ import (
 	models "github.com/F3dosik/metalert.git/internal/model"
 )
 
-const (
-	pollInterval   = 2 * time.Second
-	reportInterval = 10 * time.Second
-)
 
-func Run(serverURL string) {
+
+func Run(endpoint string, reportInterval, pollInterval time.Duration) {
+	
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
 	}
 
-	sender := NewSender(serverURL)
+	sender := NewSender(endpoint)
 
 	metrics.Update()
 

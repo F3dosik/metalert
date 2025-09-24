@@ -55,7 +55,6 @@ func (mS *MemStorage) GetGauge(metName string) (models.Gauge, error) {
 func (mS *MemStorage) UpdateCounter(metName string, value models.Counter) {
 	mS.mutex.Lock()
 	defer mS.mutex.Unlock()
-
 	mS.Counters[metName] += value
 }
 

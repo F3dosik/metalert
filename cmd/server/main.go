@@ -7,10 +7,15 @@ import (
 	"github.com/F3dosik/metalert.git/internal/server"
 )
 
-
 func main() {
-	port := config.DefaultPort()
-	if err := server.Run(port); err != nil {
+	cfg := config.LoadServerConfig()
+
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Invalid server configuration: %v", err)
+	}
+
+	log.Printf("Starting server on %s", cfg.Addr)
+	if err := server.Run(cfg.Addr); err != nil {
 		log.Fatal(err)
 	}
 }

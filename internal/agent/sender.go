@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	models "github.com/F3dosik/metalert.git/internal/model"
@@ -54,6 +55,10 @@ func (s *Sender) SendMetrics(metrics *Metrics) {
 
 func (s *Sender) sendMetric(metricType, metricName, metricValue string) error {
 	fullURL := s.ServerURL + "/update/{metType}/{metName}/{metValue}"
+
+	if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
+		fullURL = "http://" + fullURL
+	}
 
 	// log.Printf("Отправка метрики: %s %s=%s", metricType, metricName, metricValue)
 
