@@ -27,9 +27,9 @@ func update(rw http.ResponseWriter, r *http.Request, storage *repository.MemStor
 	// 	return
 	// }
 
-	var metType, metName, metValue string
+	var metName, metValue string
 
-	metType = chi.URLParam(r, "metType")
+	metType := models.MetricType(chi.URLParam(r, "metType"))
 	metName = chi.URLParam(r, "metName")
 	metValue = chi.URLParam(r, "metValue")
 

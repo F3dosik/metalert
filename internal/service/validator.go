@@ -18,8 +18,9 @@ var (
 	ErrInvalidVal  = errors.New("error: invalid value for")
 )
 
-func CheckAndParseValue(metType, metName, metValue string) (any, error) {
+func CheckAndParseValue(metType models.MetricType, metName, metValue string) (any, error) {
 	log.Printf("CheckAndParseValue: type=%s, name=%s, value=%s", metType, metName, metValue)
+	
 	if err := ValidateMetricType(metType); err != nil {
 		// log.Printf("ValidateMetricType failed: %v", err)
 		return nil, err
@@ -31,11 +32,11 @@ func CheckAndParseValue(metType, metName, metValue string) (any, error) {
 	}
 
 	switch metType {
-	case models.MetricTypeGauge:
+	case models.TypeGauge:
 		value, err := parseGaugeValue(metValue)
 		// log.Printf("parseGaugeValue result: %v, error: %v", value, err)
 		return value, err
-	case models.MetricTypeCounter:
+	case models.TypeCounter:
 		value, err := parseCounterValue(metValue)
 		// log.Printf("parseCounterValue result: %v, error: %v", value, err)
 		return value, err
@@ -45,7 +46,7 @@ func CheckAndParseValue(metType, metName, metValue string) (any, error) {
 	}
 }
 
-func ValidateMetricType(metType string) error {
+func ValidateMetricType(metType models.MetricType)  error {
 	// log.Printf("ValidateMetricType: %s", metType)
 	if !models.IsValidMetricType(metType) {
 		return ErrInvalidType

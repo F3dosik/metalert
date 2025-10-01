@@ -78,7 +78,7 @@ func (mS *MemStorage) GetAllMetrics() []models.Metrics {
 	for name, value := range mS.Gauges {
 		metrics = append(metrics, models.Metrics{
 			ID:    name,
-			MType: models.MetricTypeGauge,
+			MType: models.TypeGauge,
 			Value: &value,
 		})
 	}
@@ -86,7 +86,7 @@ func (mS *MemStorage) GetAllMetrics() []models.Metrics {
 	for name, value := range mS.Counters {
 		metrics = append(metrics, models.Metrics{
 			ID:    name,
-			MType: models.MetricTypeCounter,
+			MType: models.TypeCounter,
 			Delta: &value,
 		})
 	}

@@ -18,8 +18,8 @@ func ValueHandler(storage *repository.MemStorage) http.HandlerFunc {
 }
 
 func value(rw http.ResponseWriter, r *http.Request, storage *repository.MemStorage) {
-	var metType, metName string
-	metType = chi.URLParam(r, "metType")
+	var metName string
+	metType := models.MetricType(chi.URLParam(r, "metType"))
 	metName = chi.URLParam(r, "metName")
 
 	err := service.ValidateMetricType(metType)
@@ -30,7 +30,7 @@ func value(rw http.ResponseWriter, r *http.Request, storage *repository.MemStora
 
 	var message string
 	switch metType {
-	case models.MetricTypeGauge:
+	case models.TypeGauge:
 		val, err := storage.GetGauge(metName)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusNotFound)
@@ -39,7 +39,7 @@ func value(rw http.ResponseWriter, r *http.Request, storage *repository.MemStora
 		// message = fmt.Sprintf("%s type of %s: %f", metName, metType, float64(val))
 		message = strconv.FormatFloat(float64(val), 'f', -1, 64)
 
-	case models.MetricTypeCounter:
+	case models.TypeCounter:
 		val, err := storage.GetCounter(metName)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusNotFound)

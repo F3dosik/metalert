@@ -31,7 +31,7 @@ func (s *Sender) SendMetrics(metrics *Metrics) {
 	defer metrics.mu.RUnlock()
 
 	// Отправка gauge метрик
-	metricType := models.MetricTypeGauge
+	metricType := models.TypeGauge
 	for metricName, val := range metrics.Gauges {
 		metricValue := strconv.FormatFloat(float64(val), 'f', -1, 64)
 
@@ -42,7 +42,7 @@ func (s *Sender) SendMetrics(metrics *Metrics) {
 	}
 
 	// Отправка counter метрик
-	metricType = models.MetricTypeCounter
+	metricType = models.TypeCounter
 	for metricName, val := range metrics.Counters {
 		metricValue := fmt.Sprint(val)
 
@@ -53,7 +53,7 @@ func (s *Sender) SendMetrics(metrics *Metrics) {
 	}
 }
 
-func (s *Sender) sendMetric(metricType, metricName, metricValue string) error {
+func (s *Sender) sendMetric(metricType models.MetricType, metricName, metricValue string) error {
 	fullURL := s.ServerURL + "/update/{metType}/{metName}/{metValue}"
 
 	if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
@@ -64,7 +64,7 @@ func (s *Sender) sendMetric(metricType, metricName, metricValue string) error {
 
 	resp, err := s.Client.R().
 		SetPathParams(map[string]string{
-			"metType":  metricType,
+			"metType":  string(metricType),
 			"metName":  metricName,
 			"metValue": metricValue,
 		}).

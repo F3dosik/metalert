@@ -12,17 +12,23 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 }
 
+var (
+	ErrEmptyEndpoint    = errors.New("endpoint can't be empty")
+	ErrInvalidReportInt = errors.New("report interval must be positive")
+	ErrInvalidPollInt   = errors.New("poll interval must be positive")
+)
+
 func (c *AgentConfig) Validate() error {
 	if c.Endpoint == "" {
-		return errors.New("endpoint can't be empty")
+		return ErrEmptyEndpoint
 	}
 
 	if c.ReportInterval <= 0 {
-		return errors.New("report interval must be positive")
+		return ErrInvalidReportInt
 	}
 
 	if c.PollInterval <= 0 {
-		return errors.New("poll interval must be postive")
+		return ErrInvalidPollInt
 	}
 
 	return nil

@@ -6,14 +6,16 @@ package models
 type Gauge float64
 type Counter int64
 
+type MetricType string
+
 const (
-	MetricTypeCounter = "counter"
-	MetricTypeGauge   = "gauge"
+	TypeCounter MetricType = "counter"
+	TypeGauge   MetricType = "gauge"
 )
 
-var ValidMetricTypes = map[string]bool{
-	MetricTypeCounter: true,
-	MetricTypeGauge:   true,
+var ValidMetricTypes = map[MetricType]bool{
+	TypeCounter: true,
+	TypeGauge:   true,
 }
 
 // Metrics NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
@@ -23,12 +25,12 @@ var ValidMetricTypes = map[string]bool{
 // и соответственно не кодировать в структуру.
 type Metrics struct {
 	ID    string   `json:"id"`
-	MType string   `json:"type"`
+	MType MetricType   `json:"type"`
 	Delta *Counter `json:"delta,omitempty"` // для counter
 	Value *Gauge   `json:"value,omitempty"` // для gauge
 	Hash  string   `json:"hash,omitempty"`
 }
 
-func IsValidMetricType(metType string) bool {
+func IsValidMetricType(metType MetricType) bool {
 	return ValidMetricTypes[metType]
 }
