@@ -3,15 +3,14 @@ package main
 import (
 	"log"
 
-	"github.com/F3dosik/metalert.git/internal/config"
+	cfg "github.com/F3dosik/metalert.git/internal/config/server"
 	"github.com/F3dosik/metalert.git/internal/server"
 )
 
 func main() {
-	cfg := config.LoadServerConfig()
-
-	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid server configuration: %v", err)
+	cfg, err := cfg.LoadServerConfig()
+	if err != nil {
+		log.Fatalf("Configuration loading error: %v", err)
 	}
 
 	if err := server.Run(cfg.Addr); err != nil {

@@ -4,11 +4,11 @@ import (
 	"log"
 
 	"github.com/F3dosik/metalert.git/internal/agent"
-	"github.com/F3dosik/metalert.git/internal/config"
+	cfg "github.com/F3dosik/metalert.git/internal/config/agent"
 )
 
 func main() {
-	cfg, err := config.LoadAgentConfig()
+	cfg, err := cfg.LoadAgentConfig()
 	if err != nil {
 		log.Fatalf("Configuration loading error: %v", err)
 	}

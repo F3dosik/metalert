@@ -57,7 +57,7 @@ func update(rw http.ResponseWriter, r *http.Request, storage *repository.MemStor
 	}
 
 	message := fmt.Sprintf("Метрика %s успешно обновлена\r\n", metName)
-	log.Println(message)
+	log.Print(message)
 	RespondTextOK(rw, message)
 
 }
