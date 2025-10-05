@@ -14,7 +14,6 @@ func main() {
 		log.Fatalf("Invalid server configuration: %v", err)
 	}
 
-	log.Printf("Starting server on %s", cfg.Addr)
 	if err := server.Run(cfg.Addr); err != nil {
 		log.Fatal(err)
 	}

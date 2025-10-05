@@ -8,11 +8,9 @@ import (
 )
 
 func main() {
-	cfg := config.LoadAgentConfig()
-
-	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+	cfg, err := config.LoadAgentConfig()
+	if err != nil {
+		log.Fatalf("Configuration loading error: %v", err)
 	}
-
 	agent.Run(cfg.Endpoint, cfg.ReportInterval, cfg.PollInterval)
 }

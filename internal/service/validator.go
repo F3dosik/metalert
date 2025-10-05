@@ -6,7 +6,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 
 	models "github.com/F3dosik/metalert.git/internal/model"
@@ -19,8 +18,8 @@ var (
 )
 
 func CheckAndParseValue(metType models.MetricType, metName, metValue string) (any, error) {
-	log.Printf("CheckAndParseValue: type=%s, name=%s, value=%s", metType, metName, metValue)
-	
+	// log.Printf("CheckAndParseValue: type=%s, name=%s, value=%s", metType, metName, metValue)
+
 	if err := ValidateMetricType(metType); err != nil {
 		// log.Printf("ValidateMetricType failed: %v", err)
 		return nil, err
@@ -46,7 +45,7 @@ func CheckAndParseValue(metType models.MetricType, metName, metValue string) (an
 	}
 }
 
-func ValidateMetricType(metType models.MetricType)  error {
+func ValidateMetricType(metType models.MetricType) error {
 	// log.Printf("ValidateMetricType: %s", metType)
 	if !models.IsValidMetricType(metType) {
 		return ErrInvalidType
