@@ -11,7 +11,7 @@ import (
 )
 
 type ServerConfig struct {
-	Addr string
+	Addr string `env:"ADDRESS"`
 }
 
 var (
