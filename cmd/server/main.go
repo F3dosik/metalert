@@ -13,7 +13,5 @@ func main() {
 		log.Fatalf("Configuration loading error: %v", err)
 	}
 
-	if err := server.Run(cfg.Addr); err != nil {
-		log.Fatal(err)
-	}
+	server.Run(cfg.Addr)
 }
