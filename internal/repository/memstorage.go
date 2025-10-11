@@ -7,41 +7,41 @@ import (
 	"fmt"
 	"sync"
 
-	models "github.com/F3dosik/metalert.git/internal/model"
+	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
-type Storage interface {
+type MetricsStorage interface {
 	SetGauge(name string, value models.Gauge)
 	GetGauge(name string) (models.Gauge, error)
 
-	UpdateCounter(name string, value models.Counter)
+	AddCounter(name string, value models.Counter)
 	GetCounter(name string) (models.Counter, error)
 
-	GetAllMetrics() []models.Metrics
+	GetAllMetrics() []models.Metric
 }
 
-type MemStorage struct {
+type MemMetricsStorage struct {
 	Gauges   map[string]models.Gauge
 	Counters map[string]models.Counter
 	mutex    sync.RWMutex
 }
 
-func NewMemStorage() *MemStorage {
-	return &MemStorage{
+func NewMemMetricsStorage() *MemMetricsStorage {
+	return &MemMetricsStorage{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
 		mutex:    sync.RWMutex{},
 	}
 }
 
-func (mS *MemStorage) SetGauge(metName string, value models.Gauge) {
+func (mS *MemMetricsStorage) SetGauge(metName string, value models.Gauge) {
 	mS.mutex.Lock()
 	defer mS.mutex.Unlock()
 
 	mS.Gauges[metName] = value
 }
 
-func (mS *MemStorage) GetGauge(metName string) (models.Gauge, error) {
+func (mS *MemMetricsStorage) GetGauge(metName string) (models.Gauge, error) {
 	mS.mutex.RLock()
 	defer mS.mutex.RUnlock()
 
@@ -52,13 +52,13 @@ func (mS *MemStorage) GetGauge(metName string) (models.Gauge, error) {
 	return value, nil
 }
 
-func (mS *MemStorage) UpdateCounter(metName string, value models.Counter) {
+func (mS *MemMetricsStorage) UpdateCounter(metName string, value models.Counter) {
 	mS.mutex.Lock()
 	defer mS.mutex.Unlock()
 	mS.Counters[metName] += value
 }
 
-func (mS *MemStorage) GetCounter(metName string) (models.Counter, error) {
+func (mS *MemMetricsStorage) GetCounter(metName string) (models.Counter, error) {
 	mS.mutex.RLock()
 	defer mS.mutex.RUnlock()
 
@@ -69,14 +69,14 @@ func (mS *MemStorage) GetCounter(metName string) (models.Counter, error) {
 	return value, nil
 }
 
-func (mS *MemStorage) GetAllMetrics() []models.Metrics {
+func (mS *MemMetricsStorage) GetAllMetrics() []models.Metric {
 	mS.mutex.RLock()
 	defer mS.mutex.RUnlock()
 
-	metrics := make([]models.Metrics, 0, len(mS.Gauges)+len(mS.Counters))
+	metrics := make([]models.Metric, 0, len(mS.Gauges)+len(mS.Counters))
 
 	for name, value := range mS.Gauges {
-		metrics = append(metrics, models.Metrics{
+		metrics = append(metrics, models.Metric{
 			ID:    name,
 			MType: models.TypeGauge,
 			Value: &value,
@@ -84,7 +84,7 @@ func (mS *MemStorage) GetAllMetrics() []models.Metrics {
 	}
 
 	for name, value := range mS.Counters {
-		metrics = append(metrics, models.Metrics{
+		metrics = append(metrics, models.Metric{
 			ID:    name,
 			MType: models.TypeCounter,
 			Delta: &value,

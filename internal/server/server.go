@@ -7,30 +7,47 @@ import (
 	"github.com/F3dosik/metalert.git/internal/middleware"
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
-func Run(addr string) {
-	storage := repository.NewMemStorage()
+type Server struct {
+	storage *repository.MemMetricsStorage
+	router  chi.Router
+	logger  *zap.SugaredLogger
+}
+
+func NewServer(logger *zap.SugaredLogger) *Server {
+	storage := repository.NewMemMetricsStorage()
 	r := chi.NewRouter()
-	baseLogger, logger := middleware.NewLogger()
-	defer baseLogger.Sync()
 
-	r.Use(middleware.WithLogging(logger))
+	server := &Server{
+		storage: storage,
+		router:  r,
+		logger:  logger,
+	}
+	server.routes()
+	return server
+}
 
-	r.Get("/", handler.MainHandler(storage))
-	r.Route("/update", func(r chi.Router) {
-		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(storage))
-		//r.Post{"/{metType}/{metName}/{metValue}/*", handler.BadRequestHandler}//Ессли не будет проходить с 404
+func (s *Server) routes() {
+	s.router.Use(middleware.WithLogging(s.logger))
+
+	s.router.Get("/", handler.MainHandler(s.storage))
+	s.router.Route("/update", func(r chi.Router) {
+		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.logger))
+		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage))
 	})
-	r.Route("/value", func(r chi.Router) {
-		r.Get("/{metType}/{metName}", handler.ValueHandler(storage))
+	s.router.Route("/value", func(r chi.Router) {
+		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
+		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
 	})
+}
 
-	logger.Infow(
-		"Запуск сервера",
-		"addr", addr,
-	)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		logger.Fatalw(err.Error(), "event", "Запуск сервера")
+func (s *Server) Run(addr string) {
+	s.logger.Infow("Запуск сервера", "addr", addr)
+
+	if err := http.ListenAndServe(addr, s.router); err != nil {
+		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
 }
+

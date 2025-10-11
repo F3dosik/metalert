@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	models "github.com/F3dosik/metalert.git/internal/model"
+	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
 func Run(endpoint string, reportInterval, pollInterval time.Duration) {
@@ -27,7 +27,7 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 
 	metrics.Update()
 
-	sender.SendMetrics(metrics)
+	sender.SendMetrics(metrics, "JSON")
 
 	tickerPoll := time.NewTicker(pollInterval)
 	tickerReport := time.NewTicker(reportInterval)
@@ -39,7 +39,7 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 		case <-tickerPoll.C:
 			metrics.Update()
 		case <-tickerReport.C:
-			sender.SendMetrics(metrics)
+			sender.SendMetrics(metrics, "JSON")
 		}
 	}
 }

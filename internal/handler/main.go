@@ -8,14 +8,13 @@ import (
 	"github.com/F3dosik/metalert.git/internal/templates"
 )
 
-func MainHandler(storage *repository.MemStorage) http.HandlerFunc {
+func MainHandler(storage *repository.MemMetricsStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		mainPage(rw, storage)
 	}
 }
 
-
-func mainPage(rw http.ResponseWriter, storage *repository.MemStorage) {
+func mainPage(rw http.ResponseWriter, storage *repository.MemMetricsStorage) {
 	tmpl, err := template.ParseFS(templates.TemplatesFS, "index.html")
 	if err != nil {
 		http.Error(rw, errTemplateParsing.Error()+err.Error(), http.StatusInternalServerError)

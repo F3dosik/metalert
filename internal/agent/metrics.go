@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"sync"
 
-	models "github.com/F3dosik/metalert.git/internal/model"
+	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
 type Metrics struct {
@@ -31,6 +31,7 @@ var getters = map[string]func(*runtime.MemStats) models.Gauge{
 	"MCacheInuse":   func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.MCacheInuse) },
 	"MCacheSys":     func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.MCacheSys) },
 	"MSpanSys":      func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.MSpanSys) },
+	"MSpanInuse":    func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.MSpanInuse) },
 	"Mallocs":       func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.Mallocs) },
 	"NextGC":        func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.NextGC) },
 	"NumForcedGC":   func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.NumForcedGC) },

@@ -3,7 +3,7 @@ package repository
 import (
 	"testing"
 
-	models "github.com/F3dosik/metalert.git/internal/model"
+	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
 func TestUpdateGauge(t *testing.T) {
@@ -32,7 +32,7 @@ func TestUpdateGauge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := MemStorage{
+			storage := MemMetricsStorage{
 				Gauges: map[string]models.Gauge{},
 			}
 			for k, v := range tt.initial {
@@ -74,7 +74,7 @@ func TestUpdateCounter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := MemStorage{
+			storage := MemMetricsStorage{
 				Counters: map[string]models.Counter{},
 			}
 			for k, v := range tt.initial {

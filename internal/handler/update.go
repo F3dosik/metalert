@@ -4,25 +4,26 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 
 	"net/http"
 
-	models "github.com/F3dosik/metalert.git/internal/model"
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/F3dosik/metalert.git/internal/service"
+	"github.com/F3dosik/metalert.git/pkg/models"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
-func UpdateHandler(storage *repository.MemStorage) http.HandlerFunc {
+func UpdateHandler(storage *repository.MemMetricsStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		update(w, r, storage)
 	}
 }
 
-func update(rw http.ResponseWriter, r *http.Request, storage *repository.MemStorage) {
+func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage) {
 	// if !isPlainText(r) {
 	// 	http.Error(rw, errInvalidContentType.Error(), http.StatusBadRequest)
 	// 	return
@@ -34,30 +35,67 @@ func update(rw http.ResponseWriter, r *http.Request, storage *repository.MemStor
 	metName = chi.URLParam(r, "metName")
 	metValue = chi.URLParam(r, "metValue")
 
-	val, err := service.CheckAndParseValue(metType, metName, metValue)
+	value, err := service.CheckAndParseValue(metType, metName, metValue)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrInvalidType):
-			http.Error(rw, err.Error(), http.StatusBadRequest)
-		case errors.Is(err, service.ErrNoName):
-			http.Error(rw, err.Error(), http.StatusNotFound)
-		case errors.Is(err, service.ErrInvalidVal):
-			http.Error(rw, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-		}
+		handleServiceError(w, err)
 		return
 	}
 
-	switch v := val.(type) {
-	case models.Gauge:
-		storage.SetGauge(metName, v)
-	case models.Counter:
-		storage.UpdateCounter(metName, v)
-	}
+	service.UpdateMetric(storage, metName, value)
 
 	message := fmt.Sprintf("Метрика %s успешно обновлена\r\n", metName)
-	log.Print(message)
-	RespondTextOK(rw, message)
+	RespondTextOK(w, message)
 
+}
+
+func UpdateJSONHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		updateJSON(w, r, storage, logger)
+	}
+}
+
+func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) {
+	logger.Debug("decoding request")
+
+	var metric models.Metric
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&metric); err != nil {
+		logger.Debug("cannot decode metric JSON body", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := metric.ValidateMeta(); err != nil {
+		logger.Debug("invalid metric meta", zap.Error(err))
+		handleServiceError(w, err)
+		return
+	}
+
+	if err := metric.ValidateValue(); err != nil {
+		logger.Debug("invalid metric value", zap.Error(err))
+		handleServiceError(w, err)
+		return
+	}
+
+	service.UpdateMetricFromStruct(storage, metric)
+
+	logger.Debug("sending HTTP 200 response")
+	message := fmt.Sprintf("Метрика %s успешно обновлена\r\n", metric.ID)
+	RespondTextOK(w, message)
+
+}
+
+func handleServiceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, models.ErrInvalidType):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, models.ErrNoName):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, models.ErrInvalidValue):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, models.ErrInvalidDelta):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

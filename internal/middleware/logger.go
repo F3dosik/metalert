@@ -30,15 +30,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 }
 
-func NewLogger() (*zap.Logger, *zap.SugaredLogger) {
-	cfg := zap.NewDevelopmentConfig()
-	cfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	logger, err := cfg.Build()
-	if err != nil {
-		panic(err)
-	}
-	return logger, logger.Sugar()
-}
+
 
 func WithLogging(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

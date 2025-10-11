@@ -3,10 +3,10 @@ package agent
 import (
 	"testing"
 
-	models "github.com/F3dosik/metalert.git/internal/model"
+	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
-func TestUpdateMetrics(t *testing.T){
+func TestUpdateMetrics(t *testing.T) {
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
@@ -25,7 +25,7 @@ func TestUpdateMetrics(t *testing.T){
 	t.Run("RandomValue", func(t *testing.T) {
 		if _, ok := metrics.Gauges["RandomValue"]; !ok {
 			t.Error("Отсутствует метрика: RandomValue")
-		} 
+		}
 	})
 
 	t.Run("PollCount increment", func(t *testing.T) {
