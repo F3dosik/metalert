@@ -27,7 +27,7 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 
 	metrics.Update()
 
-	sender.SendMetrics(metrics, "JSON")
+	sender.SendMetrics(metrics, "JSON", true)
 
 	tickerPoll := time.NewTicker(pollInterval)
 	tickerReport := time.NewTicker(reportInterval)
@@ -39,7 +39,7 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 		case <-tickerPoll.C:
 			metrics.Update()
 		case <-tickerReport.C:
-			sender.SendMetrics(metrics, "JSON")
+			sender.SendMetrics(metrics, "JSON", true)
 		}
 	}
 }

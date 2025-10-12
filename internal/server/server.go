@@ -5,6 +5,7 @@ import (
 
 	"github.com/F3dosik/metalert.git/internal/handler"
 	"github.com/F3dosik/metalert.git/internal/middleware"
+	"github.com/F3dosik/metalert.git/internal/middleware/gzip"
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -30,6 +31,7 @@ func NewServer(logger *zap.SugaredLogger) *Server {
 }
 
 func (s *Server) routes() {
+	s.router.Use(gzip.WithCompression(s.logger))
 	s.router.Use(middleware.WithLogging(s.logger))
 
 	s.router.Get("/", handler.MainHandler(s.storage))
@@ -50,4 +52,3 @@ func (s *Server) Run(addr string) {
 		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
 }
-

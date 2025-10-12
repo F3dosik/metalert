@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/F3dosik/metalert.git/pkg/compression"
 	"github.com/F3dosik/metalert.git/pkg/models"
 	"github.com/go-resty/resty/v2"
 )
@@ -26,7 +28,7 @@ func NewSender(serverURL string) *Sender {
 	}
 }
 
-func (s *Sender) SendMetrics(metrics *Metrics, sendType string) {
+func (s *Sender) SendMetrics(metrics *Metrics, sendType string, compress bool) {
 	metrics.mu.RLock()
 	defer metrics.mu.RUnlock()
 
@@ -43,7 +45,7 @@ func (s *Sender) SendMetrics(metrics *Metrics, sendType string) {
 
 		if sendType == "JSON" {
 			metric := models.NewMetricGauge(metricName, val)
-			err := s.sendMetricJSON(metric)
+			err := s.sendMetricJSON(metric, compress)
 			if err != nil {
 				log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
 			}
@@ -64,7 +66,7 @@ func (s *Sender) SendMetrics(metrics *Metrics, sendType string) {
 
 		if sendType == "JSON" {
 			metric := models.NewMetricCounter(metricName, val)
-			err := s.sendMetricJSON(metric)
+			err := s.sendMetricJSON(metric, compress)
 			if err != nil {
 				log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
 			}
@@ -99,13 +101,39 @@ func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricV
 	return nil
 }
 
-func (s *Sender) sendMetricJSON(metric *models.Metric) error {
+func (s *Sender) sendMetricJSON(metric *models.Metric, compress bool) error {
 	fullURL := s.prepareURL("/update")
 
-	resp, err := s.Client.R().
+	var body interface{}
+	var contentEncoding string
+
+	if compress {
+		jsonData, err := json.Marshal(metric)
+		if err != nil {
+			return fmt.Errorf("ошибка сериализации: %w", err)
+		}
+
+		gzData, err := compression.Compress(jsonData)
+		if err != nil {
+			return fmt.Errorf("ошибка сжатия: %w", err)
+		}
+
+		body = gzData
+		contentEncoding = "gzip"
+	} else {
+		body = metric
+		contentEncoding = ""
+	}
+
+	req := s.Client.R().
 		SetHeader("Content-Type", "application/json").
-		SetBody(metric).
-		Post(fullURL)
+		SetBody(body)
+
+	if contentEncoding != "" {
+		req.SetHeader("Content-Encoding", contentEncoding)
+	}
+
+	resp, err := req.Post(fullURL)
 	if err != nil {
 		return fmt.Errorf("ошибка выполнения запроса: %w", err)
 	}
