@@ -10,7 +10,7 @@ func UpdateMetric(storage *repository.MemMetricsStorage, metName string, metValu
 	case models.Gauge:
 		storage.SetGauge(metName, v)
 	case models.Counter:
-		storage.UpdateCounter(metName, v)
+		storage.AddCounter(metName, v)
 	}
 }
 

@@ -81,7 +81,7 @@ func TestUpdateCounter(t *testing.T) {
 				storage.Counters[k] = v
 			}
 
-			storage.UpdateCounter(tt.metricName, tt.metricValue)
+			storage.AddCounter(tt.metricName, tt.metricValue)
 
 			if got := storage.Counters[tt.metricName]; got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)

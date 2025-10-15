@@ -48,13 +48,13 @@ func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetri
 
 }
 
-func UpdateJSONHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+func UpdateJSONHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updateJSON(w, r, storage, logger)
+		updateJSON(w, r, storage, logger, asyncSave)
 	}
 }
 
-func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) {
+func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric
@@ -78,6 +78,14 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemM
 	}
 
 	service.UpdateMetricFromStruct(storage, metric)
+
+	if saveOnUpdate {
+		go func() {
+			if err := storage.Save(); err != nil {
+				logger.Warnw("error saving metrics", "error", err)
+			}
+		}()
+	}
 
 	logger.Debug("sending HTTP 200 response")
 	message := fmt.Sprintf("Метрика %s успешно обновлена\r\n", metric.ID)

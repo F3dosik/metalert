@@ -85,7 +85,7 @@ func TestUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := repository.NewMemMetricsStorage()
+			storage := repository.NewMemMetricsStorage("tmp")
 
 			// Создаем полноценный router как в server.go
 			r := chi.NewRouter()

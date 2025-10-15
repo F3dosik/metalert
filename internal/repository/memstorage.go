@@ -4,7 +4,9 @@
 package repository
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
@@ -14,6 +16,7 @@ type MetricsStorage interface {
 	SetGauge(name string, value models.Gauge)
 	GetGauge(name string) (models.Gauge, error)
 
+	SetCounter(name string, value models.Counter)
 	AddCounter(name string, value models.Counter)
 	GetCounter(name string) (models.Counter, error)
 
@@ -24,13 +27,15 @@ type MemMetricsStorage struct {
 	Gauges   map[string]models.Gauge
 	Counters map[string]models.Counter
 	mutex    sync.RWMutex
+	fileName string
 }
 
-func NewMemMetricsStorage() *MemMetricsStorage {
+func NewMemMetricsStorage(fileName string) *MemMetricsStorage {
 	return &MemMetricsStorage{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
 		mutex:    sync.RWMutex{},
+		fileName: fileName,
 	}
 }
 
@@ -39,6 +44,7 @@ func (mS *MemMetricsStorage) SetGauge(metName string, value models.Gauge) {
 	defer mS.mutex.Unlock()
 
 	mS.Gauges[metName] = value
+
 }
 
 func (mS *MemMetricsStorage) GetGauge(metName string) (models.Gauge, error) {
@@ -52,10 +58,18 @@ func (mS *MemMetricsStorage) GetGauge(metName string) (models.Gauge, error) {
 	return value, nil
 }
 
-func (mS *MemMetricsStorage) UpdateCounter(metName string, value models.Counter) {
+func (mS *MemMetricsStorage) AddCounter(metName string, value models.Counter) {
 	mS.mutex.Lock()
 	defer mS.mutex.Unlock()
 	mS.Counters[metName] += value
+
+}
+
+func (mS *MemMetricsStorage) SetCounter(metName string, value models.Counter) {
+	mS.mutex.Lock()
+	defer mS.mutex.Unlock()
+
+	mS.Counters[metName] = value
 }
 
 func (mS *MemMetricsStorage) GetCounter(metName string) (models.Counter, error) {
@@ -92,4 +106,43 @@ func (mS *MemMetricsStorage) GetAllMetrics() []models.Metric {
 	}
 	return metrics
 
+}
+
+func (mS *MemMetricsStorage) Save() error {
+	metrics := mS.GetAllMetrics()
+
+	data, err := json.Marshal(&metrics)
+	if err != nil {
+		return fmt.Errorf("marshal metrics: %w", err)
+	}
+
+	tmpFile := mS.fileName + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0666); err != nil {
+		return fmt.Errorf("write tmp file: %w", err)
+	}
+
+	return os.Rename(tmpFile, mS.fileName)
+}
+
+func (mS *MemMetricsStorage) Load() error {
+	data, err := os.ReadFile(mS.fileName)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+
+	var metrics []models.Metric
+	if err := json.Unmarshal(data, &metrics); err != nil {
+		return fmt.Errorf("unmarshal metrics: %w", err)
+	}
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.TypeGauge:
+			mS.SetGauge(metric.ID, *metric.Value)
+		case models.TypeCounter:
+			mS.SetCounter(metric.ID, *metric.Delta)
+		}
+	}
+
+	return nil
 }

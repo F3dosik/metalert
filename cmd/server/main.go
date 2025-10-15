@@ -11,13 +11,12 @@ import (
 func main() {
 	cfg, err := cfg.LoadServerConfig()
 	if err != nil {
-		 log.Fatalf("Configuration loading error: %v", err)
+		log.Fatalf("Configuration loading error: %v", err)
 	}
-
 	mode := logger.Mode(cfg.LogMode)
 	baseLogger, sugarLogger := logger.NewLogger(mode)
 	defer func() { _ = baseLogger.Sync() }()
 
-	server := server.NewServer(sugarLogger)
-	server.Run(cfg.Addr)
+	server := server.NewServer(cfg, sugarLogger)
+	server.Run()
 }
