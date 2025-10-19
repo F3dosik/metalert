@@ -17,9 +17,9 @@ type AgentConfig struct {
 }
 
 var (
-	ErrEmptyEndpoint    = errors.New("endpoint can't be empty")
-	ErrInvalidReportInt = errors.New("report interval must be positive")
-	ErrInvalidPollInt   = errors.New("poll interval must be positive")
+	errEmptyEndpoint    = errors.New("endpoint can't be empty")
+	errInvalidReportInt = errors.New("report interval must be positive")
+	errInvalidPollInt   = errors.New("poll interval must be positive")
 )
 
 const (
@@ -30,15 +30,15 @@ const (
 
 func (c *AgentConfig) Validate() error {
 	if c.Endpoint == "" {
-		return ErrEmptyEndpoint
+		return errEmptyEndpoint
 	}
 
 	if c.ReportInterval <= 0 {
-		return ErrInvalidReportInt
+		return errInvalidReportInt
 	}
 
 	if c.PollInterval <= 0 {
-		return ErrInvalidPollInt
+		return errInvalidPollInt
 	}
 
 	return nil
@@ -53,12 +53,9 @@ func (c *AgentConfig) String() string {
 
 func LoadAgentConfig() (*AgentConfig, error) {
 	envConfig := parseEnvConfig()
-	// log.Println("envConfig:", envConfig)
 	flagConfig := parseFlagConfig()
-	// log.Println("flagConfig:", flagConfig)
 
 	config := mergeConfigs(envConfig, flagConfig)
-	// log.Println("FinalConfig", config)
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}

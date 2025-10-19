@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/F3dosik/metalert.git/pkg/compression"
@@ -37,6 +37,7 @@ func (s *Sender) SendMetrics(metrics *Metrics, sendType string, compress bool) {
 	for metricName, val := range metrics.Gauges {
 		if sendType == "URL" {
 			metricValue := strconv.FormatFloat(float64(val), 'f', -1, 64)
+
 			err := s.sendMetricURL(metricType, metricName, metricValue)
 			if err != nil {
 				log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
@@ -56,7 +57,7 @@ func (s *Sender) SendMetrics(metrics *Metrics, sendType string, compress bool) {
 	metricType = models.TypeCounter
 	for metricName, val := range metrics.Counters {
 		if sendType == "URL" {
-			metricValue := fmt.Sprint(val)
+			metricValue := strconv.Itoa(int(val))
 
 			err := s.sendMetricURL(metricType, metricName, metricValue)
 			if err != nil {
@@ -78,8 +79,6 @@ func (s *Sender) SendMetrics(metrics *Metrics, sendType string, compress bool) {
 func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricValue string) error {
 	fullURL := s.prepareURL("/update/{metType}/{metName}/{metValue}")
 
-	// log.Printf("Отправка метрики: %s %s=%s", metricType, metricName, metricValue)
-
 	resp, err := s.Client.R().
 		SetPathParams(map[string]string{
 			"metType":  string(metricType),
@@ -97,7 +96,7 @@ func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricV
 		return fmt.Errorf("неожиданный статус код: %d", resp.StatusCode())
 	}
 
-	log.Printf("Метрика %s успешно отправлена. Ответ: %s", metricName, resp.Body()) // Или использовать resp.String и проверять ошибку
+	log.Printf("Метрика %s успешно отправлена. Ответ: %s", metricName, resp.Body())
 	return nil
 }
 
@@ -147,9 +146,19 @@ func (s *Sender) sendMetricJSON(metric *models.Metric, compress bool) error {
 }
 
 func (s *Sender) prepareURL(path string) string {
-	fullURL := s.ServerURL + path
-	if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
-		fullURL = "http://" + fullURL
+	fullURL, err := url.JoinPath(s.ServerURL, path)
+	if err != nil {
+		fullURL = s.ServerURL + path
+	}
+
+	parsed, err := url.Parse(fullURL)
+	if err != nil {
+		return "http://" + fullURL
+	}
+
+	if parsed.Scheme == "" {
+		parsed.Scheme = "http"
+		fullURL = parsed.String()
 	}
 	return fullURL
 }

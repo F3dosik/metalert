@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/F3dosik/metalert.git/internal/repository"
+	"github.com/F3dosik/metalert.git/pkg/logger"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -85,19 +86,21 @@ func TestUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := repository.NewMemMetricsStorage("tmp")
+			storage, _ := repository.NewMemMetricsStorage("tmp", false)
+
+			baseLogger, sugarLogger := logger.NewLogger("development")
+			defer func() { _ = baseLogger.Sync() }()
 
 			// Создаем полноценный router как в server.go
 			r := chi.NewRouter()
 			r.Route("/update", func(r chi.Router) {
-				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage))
+				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage, sugarLogger))
 			})
 
 			req := httptest.NewRequest(tt.method, tt.url, nil)
 			req.Header.Set("Content-Type", tt.contentType)
 			rr := httptest.NewRecorder()
 
-			// Тестируем через router, а не напрямую хэндлер
 			r.ServeHTTP(rr, req)
 
 			if rr.Code != tt.want {

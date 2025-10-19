@@ -24,15 +24,17 @@ type Server struct {
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 	absPath, err := filepath.Abs(cfg.FileStoragePath)
 	if err != nil {
-		absPath = cfg.FileStoragePath // fallback, если вдруг ошибка
+		absPath = cfg.FileStoragePath
 	}
-	storage := repository.NewMemMetricsStorage(absPath)
-	if cfg.Restore {
-		err := storage.Load()
-		if err != nil {
-			logger.Warnw("failed to restore metrics", "error", err)
+	storage, err := repository.NewMemMetricsStorage(absPath, cfg.Restore)
+	if err != nil {
+		logger.Warnw("failed to restore metrics", "error", err)
+	}
+	go func() {
+		for err := range storage.ErrCh {
+			logger.Warnw("failed to save metrics", "error", err)
 		}
-	}
+	}()
 
 	r := chi.NewRouter()
 
@@ -53,7 +55,7 @@ func (s *Server) routes() {
 	s.router.Get("/", handler.MainHandler(s.storage))
 	s.router.Route("/update", func(r chi.Router) {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.logger, s.config.StoreInterval == 0))
-		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage))
+		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage, s.logger))
 	})
 	s.router.Route("/value", func(r chi.Router) {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))

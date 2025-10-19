@@ -22,8 +22,8 @@ type ServerConfig struct {
 }
 
 var (
-	ErrEmptyAddr = errors.New("address can't be empty")
-	ErrEmptyPort = errors.New("server address must contain port")
+	errEmptyAddr = errors.New("address can't be empty")
+	errEmptyPort = errors.New("server address must contain port")
 )
 
 const (
@@ -36,11 +36,11 @@ const (
 
 func (c *ServerConfig) Validate() error {
 	if c.Addr == "" {
-		return ErrEmptyAddr
+		return errEmptyAddr
 	}
 
 	if !strings.Contains(c.Addr, ":") {
-		return ErrEmptyPort
+		return errEmptyPort
 	}
 
 	switch c.LogMode {

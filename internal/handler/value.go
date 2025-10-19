@@ -72,7 +72,7 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemMe
 
 	if err := metric.ValidateMeta(); err != nil {
 		logger.Debug("invalid metric", zap.Error(err))
-		handleServiceError(w, err)
+		handleServiceError(w, logger, err)
 		return
 	}
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
@@ -28,15 +29,34 @@ type MemMetricsStorage struct {
 	Counters map[string]models.Counter
 	mutex    sync.RWMutex
 	fileName string
+	tmpFile  *os.File
+	ErrCh    chan error
 }
 
-func NewMemMetricsStorage(fileName string) *MemMetricsStorage {
-	return &MemMetricsStorage{
+func NewMemMetricsStorage(fileName string, restore bool) (*MemMetricsStorage, error) {
+	tmpFile, err := os.OpenFile(fileName+".tmp", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	storage := &MemMetricsStorage{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
 		mutex:    sync.RWMutex{},
 		fileName: fileName,
+		tmpFile:  tmpFile,
 	}
+
+	if restore {
+		if err := storage.load(); err != nil {
+			return storage, err
+		}
+	}
+
+	go storage.periodicSave(time.Minute)
+
+	return storage, nil
+
 }
 
 func (mS *MemMetricsStorage) SetGauge(metName string, value models.Gauge) {
@@ -124,7 +144,7 @@ func (mS *MemMetricsStorage) Save() error {
 	return os.Rename(tmpFile, mS.fileName)
 }
 
-func (mS *MemMetricsStorage) Load() error {
+func (mS *MemMetricsStorage) load() error {
 	data, err := os.ReadFile(mS.fileName)
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
@@ -145,4 +165,24 @@ func (mS *MemMetricsStorage) Load() error {
 	}
 
 	return nil
+}
+
+func (mS *MemMetricsStorage) Close() error {
+	mS.tmpFile.Close()
+	// Атомарная замена основного файла
+	return os.Rename(mS.fileName+".tmp", mS.fileName)
+}
+
+func (mS *MemMetricsStorage) periodicSave(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := mS.Close(); err != nil {
+			select {
+			case mS.ErrCh <- err:
+			default:
+			}
+		}
+	}
 }

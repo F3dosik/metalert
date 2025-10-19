@@ -17,17 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func UpdateHandler(storage *repository.MemMetricsStorage) http.HandlerFunc {
+func UpdateHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		update(w, r, storage)
+		update(w, r, storage, logger)
 	}
 }
 
-func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage) {
-	// if !isPlainText(r) {
-	// 	http.Error(rw, errInvalidContentType.Error(), http.StatusBadRequest)
-	// 	return
-	// }
+func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) {
 
 	var metName, metValue string
 
@@ -37,13 +33,13 @@ func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetri
 
 	value, err := service.CheckAndParseValue(metType, metName, metValue)
 	if err != nil {
-		handleServiceError(w, err)
+		handleServiceError(w, logger, err)
 		return
 	}
 
 	service.UpdateMetric(storage, metName, value)
 
-	message := fmt.Sprintf("Метрика %s успешно обновлена\r\n", metName)
+	message := fmt.Sprint("Метрика ", metName, " успешно обновлена\r\n")
 	RespondTextOK(w, message)
 
 }
@@ -61,19 +57,17 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemM
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&metric); err != nil {
 		logger.Debug("cannot decode metric JSON body", zap.Error(err))
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
 	if err := metric.ValidateMeta(); err != nil {
-		logger.Debug("invalid metric meta", zap.Error(err))
-		handleServiceError(w, err)
+		handleServiceError(w, logger, err)
 		return
 	}
 
 	if err := metric.ValidateValue(); err != nil {
-		logger.Debug("invalid metric value", zap.Error(err))
-		handleServiceError(w, err)
+		handleServiceError(w, logger, err)
 		return
 	}
 
@@ -88,22 +82,28 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemM
 	}
 
 	logger.Debug("sending HTTP 200 response")
-	message := fmt.Sprintf("Метрика %s успешно обновлена\r\n", metric.ID)
+	message := fmt.Sprint("Метрика ", metric.ID, " успешно обновлена\r\n")
 	RespondTextOK(w, message)
 
 }
 
-func handleServiceError(w http.ResponseWriter, err error) {
+func handleServiceError(w http.ResponseWriter, logger *zap.SugaredLogger, err error) {
 	switch {
 	case errors.Is(err, models.ErrInvalidType):
+		logger.Debugw("invalid metric type", "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
+
 	case errors.Is(err, models.ErrNoName):
+		logger.Debugw("metric name not provided", "error", err)
 		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, models.ErrInvalidValue):
+
+	case errors.Is(err, models.ErrInvalidValue),
+		errors.Is(err, models.ErrInvalidDelta):
+		logger.Debugw("invalid metric value", "error", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, models.ErrInvalidDelta):
-		http.Error(w, err.Error(), http.StatusBadRequest)
+
 	default:
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		logger.Errorw("internal server error", "error", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
