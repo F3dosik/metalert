@@ -7,22 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
-
-type MetricsStorage interface {
-	SetGauge(name string, value models.Gauge)
-	GetGauge(name string) (models.Gauge, error)
-
-	SetCounter(name string, value models.Counter)
-	AddCounter(name string, value models.Counter)
-	GetCounter(name string) (models.Counter, error)
-
-	GetAllMetrics() []models.Metric
-}
 
 type MemMetricsStorage struct {
 	Gauges   map[string]models.Gauge
@@ -34,7 +24,11 @@ type MemMetricsStorage struct {
 }
 
 func NewMemMetricsStorage(fileName string, restore bool) (*MemMetricsStorage, error) {
-	tmpFile, err := os.OpenFile(fileName+".tmp", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666)
+	absPath, err := filepath.Abs(fileName)
+	if err != nil {
+		absPath = fileName
+	}
+	tmpFile, err := os.OpenFile(absPath+".tmp", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +37,9 @@ func NewMemMetricsStorage(fileName string, restore bool) (*MemMetricsStorage, er
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
 		mutex:    sync.RWMutex{},
-		fileName: fileName,
+		fileName: absPath,
 		tmpFile:  tmpFile,
+		ErrCh:    make(chan error, 10),
 	}
 
 	if restore {
@@ -136,12 +131,18 @@ func (mS *MemMetricsStorage) Save() error {
 		return fmt.Errorf("marshal metrics: %w", err)
 	}
 
-	tmpFile := mS.fileName + ".tmp"
-	if err := os.WriteFile(tmpFile, data, 0666); err != nil {
+	if err := mS.tmpFile.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := mS.tmpFile.Seek(0, 0); err != nil {
+		return err
+	}
+
+	if _, err := mS.tmpFile.Write(data); err != nil {
 		return fmt.Errorf("write tmp file: %w", err)
 	}
 
-	return os.Rename(tmpFile, mS.fileName)
+	return nil
 }
 
 func (mS *MemMetricsStorage) load() error {
@@ -168,21 +169,55 @@ func (mS *MemMetricsStorage) load() error {
 }
 
 func (mS *MemMetricsStorage) Close() error {
-	mS.tmpFile.Close()
-	// Атомарная замена основного файла
-	return os.Rename(mS.fileName+".tmp", mS.fileName)
+	mS.mutex.Lock()
+	defer mS.mutex.Unlock()
+
+	if err := mS.Save(); err != nil {
+		return fmt.Errorf("save before close: %w", err)
+	}
+
+	if err := mS.tmpFile.Sync(); err != nil {
+		return fmt.Errorf("sync tmp file: %w", err)
+	}
+
+	if err := mS.tmpFile.Close(); err != nil {
+		return fmt.Errorf("close tmp file: %w", err)
+	}
+
+	if err := os.Rename(mS.fileName+".tmp", mS.fileName); err != nil {
+		return fmt.Errorf("rename tmp file: %w", err)
+	}
+
+	return nil
 }
 
 func (mS *MemMetricsStorage) periodicSave(interval time.Duration) {
+	var err error
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if err := mS.Close(); err != nil {
-			select {
-			case mS.ErrCh <- err:
-			default:
-			}
+		mS.mutex.Lock()
+
+		if err = mS.Close(); err != nil {
+			mS.sendErr(err)
 		}
+
+		file, err := os.OpenFile(mS.fileName+".tmp", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666)
+		if err != nil {
+			mS.sendErr(err)
+		} else {
+			mS.tmpFile = file
+		}
+
+		mS.mutex.Unlock()
+
+	}
+}
+
+func (mS *MemMetricsStorage) sendErr(err error) {
+	select {
+	case mS.ErrCh <- err:
+	default:
 	}
 }

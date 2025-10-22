@@ -5,7 +5,7 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
-func UpdateMetric(storage *repository.MemMetricsStorage, metName string, metValue any) {
+func UpdateMetric(storage repository.MetricsStorage, metName string, metValue any) {
 	switch v := metValue.(type) {
 	case models.Gauge:
 		storage.SetGauge(metName, v)
@@ -14,7 +14,7 @@ func UpdateMetric(storage *repository.MemMetricsStorage, metName string, metValu
 	}
 }
 
-func UpdateMetricFromStruct(storage *repository.MemMetricsStorage, met models.Metric) {
+func UpdateMetricFromStruct(storage repository.MetricsStorage, met models.Metric) {
 	switch met.MType {
 	case models.TypeGauge:
 		UpdateMetric(storage, met.ID, *met.Value)

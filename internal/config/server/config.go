@@ -14,16 +14,21 @@ import (
 )
 
 type ServerConfig struct {
-	Addr            string        `env:"ADDRESS"`
-	LogMode         string        `env:"LOG_MODE"`
-	StoreInterval   time.Duration `env:"STORE_INTERVAL"`
-	FileStoragePath string        `env:"FILE_STORAGE_PATH"`
-	Restore         bool          `env:"RESTORE"`
+	Addr          string        `env:"ADDRESS"`
+	LogMode       string        `env:"LOG_MODE"`
+	StoreInterval time.Duration `env:"STORE_INTERVAL"`
+
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Restore         bool   `env:"RESTORE"`
+
+	DatabaseDSN string `env:"DATABASE_DSN"`
+	UseDB       bool   `env:"USE_DB"`
 }
 
 var (
 	errEmptyAddr = errors.New("address can't be empty")
 	errEmptyPort = errors.New("server address must contain port")
+	errEmptyDSN  = errors.New("DATABASE_DSN cannot be empty")
 )
 
 const (
@@ -32,6 +37,8 @@ const (
 	defaultStoreInterval   = 300 * time.Second
 	defaultFileStoragePath = "var/metrics.json"
 	defaultRestore         = false
+	//defaultDSN             = "postgres://server:YandexPracticum@localhost:5432/metalert?sslmode=disable"
+	defaultDSN = ""
 )
 
 func (c *ServerConfig) Validate() error {
@@ -49,6 +56,9 @@ func (c *ServerConfig) Validate() error {
 		return fmt.Errorf("invalid log mode: %s, allowed: development, production", c.LogMode)
 	}
 
+	// if c.UseDB && c.DatabaseDSN == "" {
+	// 	return errEmptyDSN
+	// }
 	return nil
 }
 
@@ -81,6 +91,7 @@ type flagConfig struct {
 	StoreInterval   int
 	FileStoragePath string
 	Restore         bool
+	DatabaseDSN     string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -88,9 +99,10 @@ func parseFlagConfig() *flagConfig {
 
 	flag.StringVar(&config.Address, "a", "", "address and port to run server")
 	flag.StringVar(&config.LogMode, "log-mode", "", "logger mode: development (Debug + Colors), production (Info)")
-	flag.IntVar(&config.StoreInterval, "i", 0, "store interval (seconds)")
-	flag.StringVar(&config.FileStoragePath, "", "", "file storage path")
+	flag.IntVar(&config.StoreInterval, "i", -1, "store interval (seconds)")
+	flag.StringVar(&config.FileStoragePath, "f", "", "file storage path")
 	flag.BoolVar(&config.Restore, "r", false, "restore metrics from file")
+	flag.StringVar(&config.DatabaseDSN, "d", "", "PostgreSQL DSN")
 	flag.Parse()
 
 	return &config
@@ -104,6 +116,8 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig
 	config.StoreInterval = resolveDuration(envConfig.StoreInterval, flagConfig.StoreInterval, defaultStoreInterval)
 	config.FileStoragePath = resolveString(envConfig.FileStoragePath, flagConfig.FileStoragePath, defaultFileStoragePath)
 	config.Restore = resolveBool(envConfig.Restore, flagConfig.Restore, defaultRestore)
+	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
+	config.UseDB = false
 
 	return config
 }
@@ -119,7 +133,7 @@ func resolveString(envVal, flagVal, def string) string {
 }
 
 func resolveDuration(envVal time.Duration, flagVal int, def time.Duration) time.Duration {
-	if envVal >= 0 {
+	if _, ok := os.LookupEnv("STORE_INTERVAL"); ok {
 		return envVal
 	}
 	if flagVal >= 0 {
@@ -132,5 +146,8 @@ func resolveBool(envVal, flagVal, def bool) bool {
 	if _, ok := os.LookupEnv("RESTORE"); ok {
 		return envVal
 	}
-	return flagVal || def
+	if flagVal {
+		return true
+	}
+	return def
 }

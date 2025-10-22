@@ -2,7 +2,6 @@ package server
 
 import (
 	"net/http"
-	"path/filepath"
 	"time"
 
 	cfg "github.com/F3dosik/metalert.git/internal/config/server"
@@ -16,25 +15,32 @@ import (
 
 type Server struct {
 	config  *cfg.ServerConfig
-	storage *repository.MemMetricsStorage
+	storage repository.MetricsStorage
 	router  chi.Router
 	logger  *zap.SugaredLogger
 }
 
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
-	absPath, err := filepath.Abs(cfg.FileStoragePath)
-	if err != nil {
-		absPath = cfg.FileStoragePath
-	}
-	storage, err := repository.NewMemMetricsStorage(absPath, cfg.Restore)
-	if err != nil {
-		logger.Warnw("failed to restore metrics", "error", err)
-	}
-	go func() {
-		for err := range storage.ErrCh {
-			logger.Warnw("failed to save metrics", "error", err)
+	var storage repository.MetricsStorage
+	var err error
+	if cfg.UseDB {
+		storage, err = repository.NewDBMetricStorage(cfg.DatabaseDSN)
+		if err != nil {
+			logger.Warnw("failed to create New DBMetricStorage", "error", err)
 		}
-	}()
+	} else {
+		storage, err = repository.NewMemMetricsStorage(cfg.FileStoragePath, cfg.Restore)
+		if err != nil {
+			logger.Warnw("failed to create New MemMetricStorage", "error", err)
+		}
+		if memStorage, ok := storage.(*repository.MemMetricsStorage); ok {
+			go func() {
+				for err := range memStorage.ErrCh {
+					logger.Warnw("failed to save metrics", "error", err)
+				}
+			}()
+		}
+	}
 
 	r := chi.NewRouter()
 
@@ -61,6 +67,7 @@ func (s *Server) routes() {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
 	})
+	s.router.Get("/ping", handler.PingDB(s.storage, s.config.UseDB, s.logger))
 }
 
 func (s *Server) Run() {
@@ -70,6 +77,8 @@ func (s *Server) Run() {
 		"store_interval", s.config.StoreInterval,
 		"file_path", s.config.FileStoragePath,
 		"restore", s.config.Restore,
+		"DatabaseDSN", s.config.DatabaseDSN,
+		"UseDB", s.config.UseDB,
 	)
 
 	if s.config.StoreInterval > 0 {
@@ -84,11 +93,17 @@ func (s *Server) Run() {
 func (s *Server) AutoSave() {
 	s.logger.Infow("Включено автосохранение метрик", "interval", s.config.StoreInterval)
 
+	savable, ok := s.storage.(repository.Savable)
+	if !ok {
+		s.logger.Warn("Хранилище не поддерживает автосохранение")
+		return
+	}
+
 	ticker := time.NewTicker(s.config.StoreInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		if err := s.storage.Save(); err != nil {
+		if err := savable.Save(); err != nil {
 			s.logger.Warnw("Ошибка при автосохранении", "error", err)
 		} else {
 			s.logger.Debug("Метрики успешно сохранены")

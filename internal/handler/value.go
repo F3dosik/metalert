@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,13 +12,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func ValueHandler(storage *repository.MemMetricsStorage) http.HandlerFunc {
+func ValueHandler(storage repository.MetricsStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		value(rw, r, storage)
 	}
 }
 
-func value(rw http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage) {
+func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsStorage) {
 	var metName string
 	metType := models.MetricType(chi.URLParam(r, "metType"))
 	metName = chi.URLParam(r, "metName")
@@ -38,7 +37,6 @@ func value(rw http.ResponseWriter, r *http.Request, storage *repository.MemMetri
 			http.Error(rw, err.Error(), http.StatusNotFound)
 			return
 		}
-		// message = fmt.Sprintf("%s type of %s: %f", metName, metType, float64(val))
 		message = strconv.FormatFloat(float64(val), 'f', -1, 64)
 
 	case models.TypeCounter:
@@ -47,19 +45,18 @@ func value(rw http.ResponseWriter, r *http.Request, storage *repository.MemMetri
 			http.Error(rw, err.Error(), http.StatusNotFound)
 			return
 		}
-		// message = fmt.Sprintf("%s type of %s: %d", metName, metType, int64(val))
-		message = fmt.Sprintf("%d", int64(val))
+		message = strconv.Itoa(int(val))
 	}
 	RespondTextOK(rw, message)
 }
 
-func ValueJSONHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+func ValueJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		valueJSON(w, r, storage, logger)
 	}
 }
 
-func valueJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) {
+func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric

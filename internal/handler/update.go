@@ -17,13 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func UpdateHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+func UpdateHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		update(w, r, storage, logger)
 	}
 }
 
-func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger) {
+func update(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger) {
 
 	var metName, metValue string
 
@@ -44,13 +44,13 @@ func update(w http.ResponseWriter, r *http.Request, storage *repository.MemMetri
 
 }
 
-func UpdateJSONHandler(storage *repository.MemMetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
+func UpdateJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		updateJSON(w, r, storage, logger, asyncSave)
 	}
 }
 
-func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemMetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
+func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric
@@ -74,11 +74,13 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage *repository.MemM
 	service.UpdateMetricFromStruct(storage, metric)
 
 	if saveOnUpdate {
-		go func() {
-			if err := storage.Save(); err != nil {
-				logger.Warnw("error saving metrics", "error", err)
-			}
-		}()
+		if s, ok := storage.(repository.Savable); ok {
+			go func() {
+				if err := s.Save(); err != nil {
+					logger.Warnw("error saving metrics", "error", err)
+				}
+			}()
+		}
 	}
 
 	logger.Debug("sending HTTP 200 response")
