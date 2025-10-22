@@ -28,6 +28,12 @@ func NewMemMetricsStorage(fileName string, restore bool) (*MemMetricsStorage, er
 	if err != nil {
 		absPath = fileName
 	}
+
+	dir := filepath.Dir(absPath)
+	if err = os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("ошибка создания каталога %s: %w", dir, err)
+	}
+
 	tmpFile, err := os.OpenFile(absPath+".tmp", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666)
 	if err != nil {
 		return nil, err
@@ -169,9 +175,6 @@ func (mS *MemMetricsStorage) load() error {
 }
 
 func (mS *MemMetricsStorage) Close() error {
-	mS.mutex.Lock()
-	defer mS.mutex.Unlock()
-
 	if err := mS.Save(); err != nil {
 		return fmt.Errorf("save before close: %w", err)
 	}
@@ -197,7 +200,6 @@ func (mS *MemMetricsStorage) periodicSave(interval time.Duration) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		mS.mutex.Lock()
 
 		if err = mS.Close(); err != nil {
 			mS.sendErr(err)
@@ -209,9 +211,6 @@ func (mS *MemMetricsStorage) periodicSave(interval time.Duration) {
 		} else {
 			mS.tmpFile = file
 		}
-
-		mS.mutex.Unlock()
-
 	}
 }
 
