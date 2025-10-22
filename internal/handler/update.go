@@ -22,10 +22,6 @@ func UpdateHandler(storage *repository.MemStorage) http.HandlerFunc {
 }
 
 func update(rw http.ResponseWriter, r *http.Request, storage *repository.MemStorage) {
-	// if !isPlainText(r) {
-	// 	http.Error(rw, errInvalidContentType.Error(), http.StatusBadRequest)
-	// 	return
-	// }
 
 	var metName, metValue string
 
