@@ -4,6 +4,7 @@
 package service
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
@@ -32,13 +33,13 @@ func CheckAndParseValue(metType models.MetricType, metName, metValue string) (an
 		// log.Printf("parseCounterValue result: %v, error: %v", value, err)
 		return value, err
 	default:
-		// log.Printf("Unknown metric type: %s", metType)
+		log.Printf("Unknown metric type: %s", metType)
 		return nil, models.ErrInvalidType
 	}
 }
 
 func ValidateMetricType(metType models.MetricType) error {
-	// log.Printf("ValidateMetricType: %s", metType)
+	log.Printf("ValidateMetricType: %s", metType)
 	if !models.IsValidMetricType(metType) {
 		return models.ErrInvalidType
 	}
