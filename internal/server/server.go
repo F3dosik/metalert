@@ -1,7 +1,11 @@
 package server
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	cfg "github.com/F3dosik/metalert.git/internal/config/server"
@@ -14,43 +18,51 @@ import (
 )
 
 type Server struct {
-	config  *cfg.ServerConfig
-	storage repository.MetricsStorage
-	router  chi.Router
-	logger  *zap.SugaredLogger
+	config    *cfg.ServerConfig
+	storage   repository.MetricsStorage
+	dbStorage *repository.DBMetricStorage
+	router    chi.Router
+	logger    *zap.SugaredLogger
 }
 
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
-	var storage repository.MetricsStorage
-	var err error
-	if cfg.UseDB {
-		storage, err = repository.NewDBMetricStorage(cfg.DatabaseDSN)
-		if err != nil {
-			logger.Warnw("failed to create New DBMetricStorage", "error", err)
-		}
-	} else {
-		storage, err = repository.NewMemMetricsStorage(cfg.FileStoragePath, cfg.Restore)
-		if err != nil {
-			logger.Warnw("failed to create New MemMetricStorage", "error", err)
-		}
-		if memStorage, ok := storage.(*repository.MemMetricsStorage); ok {
-			go func() {
-				for err := range memStorage.ErrCh {
-					logger.Warnw("failed to save metrics", "error", err)
-				}
-			}()
-		}
+	// var storage repository.MetricsStorage
+	// var err error
+
+	DBstorage, err := repository.NewDBMetricStorage(cfg.DatabaseDSN)
+	if err != nil {
+		logger.Fatalw("failed to create New DBMetricStorage", "error", err)
 	}
+
+	storage, err := repository.NewMemMetricsStorage(cfg.FileStoragePath, cfg.Restore)
+	if err != nil {
+		logger.Warnw("failed to create New MemMetricStorage", "error", err)
+	}
+	// if memStorage, ok := storage.(*repository.MemMetricsStorage); ok {
+	// 	go func() {
+	// 		for err := range memStorage.ErrCh {
+	// 			logger.Warnw("failed to save metrics", "error", err)
+	// 		}
+	// 	}()
+	// }
+
+	go func() {
+		for err := range storage.ErrCh {
+			logger.Warnw("failed to save metrics", "error", err)
+		}
+	}()
 
 	r := chi.NewRouter()
 
 	server := &Server{
-		config:  cfg,
-		storage: storage,
-		router:  r,
-		logger:  logger,
+		config:    cfg,
+		storage:   storage,
+		dbStorage: DBstorage,
+		router:    r,
+		logger:    logger,
 	}
 	server.routes()
+
 	return server
 }
 
@@ -67,7 +79,7 @@ func (s *Server) routes() {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
 	})
-	s.router.Get("/ping", handler.PingDB(s.storage, s.config.UseDB, s.logger))
+	s.router.Get("/ping", handler.PingDB(s.dbStorage, s.config.UseDB, s.logger))
 }
 
 func (s *Server) Run() {
@@ -85,9 +97,33 @@ func (s *Server) Run() {
 		go s.AutoSave()
 	}
 
-	if err := http.ListenAndServe(s.config.Addr, s.router); err != nil {
-		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
+	srv := &http.Server{Addr: s.config.Addr, Handler: s.router}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
+		}
+	}()
+
+	<-stop
+	s.logger.Infow("Получен сигнал завершения, сохраняем метрики...")
+
+	if memStorage, ok := s.storage.(*repository.MemMetricsStorage); ok {
+		if err := memStorage.Close(); err != nil {
+			s.logger.Warnw("Ошибка при закрытии storage", "error", err)
+		}
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		s.logger.Fatalw(err.Error(), "event", "Принудительное завершение сервера")
+	}
+
+	s.logger.Infow("Сервер завершен")
 }
 
 func (s *Server) AutoSave() {

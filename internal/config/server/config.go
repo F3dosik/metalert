@@ -37,8 +37,8 @@ const (
 	defaultStoreInterval   = 300 * time.Second
 	defaultFileStoragePath = "var/metrics.json"
 	defaultRestore         = false
-	//defaultDSN             = "postgres://server:YandexPracticum@localhost:5432/metalert?sslmode=disable"
-	defaultDSN = ""
+	defaultDSN             = "postgres://server:YandexPracticum@localhost:5432/metalert?sslmode=disable"
+	// defaultDSN = ""
 )
 
 func (c *ServerConfig) Validate() error {

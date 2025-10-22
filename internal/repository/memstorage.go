@@ -50,11 +50,11 @@ func NewMemMetricsStorage(fileName string, restore bool) (*MemMetricsStorage, er
 
 	if restore {
 		if err := storage.load(); err != nil {
-			return storage, err
+			storage.ErrCh <- fmt.Errorf("не удалось восстановить метрики: %w", err)
 		}
 	}
 
-	go storage.periodicSave(time.Minute)
+	go storage.periodicSave(1 * time.Minute)
 
 	return storage, nil
 
@@ -200,7 +200,6 @@ func (mS *MemMetricsStorage) periodicSave(interval time.Duration) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-
 		if err = mS.Close(); err != nil {
 			mS.sendErr(err)
 		}

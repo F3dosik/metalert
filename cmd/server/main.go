@@ -16,7 +16,6 @@ func main() {
 	mode := logger.Mode(cfg.LogMode)
 	baseLogger, sugarLogger := logger.NewLogger(mode)
 	defer func() { _ = baseLogger.Sync() }()
-
 	server := server.NewServer(cfg, sugarLogger)
 	server.Run()
 }
