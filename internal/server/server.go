@@ -29,9 +29,16 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 	// var storage repository.MetricsStorage
 	// var err error
 
-	DBstorage, err := repository.NewDBMetricStorage(cfg.DatabaseDSN)
-	if err != nil {
-		logger.Fatalw("failed to create New DBMetricStorage", "error", err)
+	var DBstorage *repository.DBMetricStorage
+	var err error
+
+	if cfg.DatabaseDSN != "" {
+		DBstorage, err = repository.NewDBMetricStorage(cfg.DatabaseDSN)
+		if err != nil {
+			logger.Warnw("failed to create DBMetricStorage", "error", err)
+		}
+	} else {
+		logger.Infow("Database DSN not set — using memory storage only")
 	}
 
 	storage, err := repository.NewMemMetricsStorage(cfg.FileStoragePath, cfg.Restore)
