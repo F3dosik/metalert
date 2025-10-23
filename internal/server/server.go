@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -103,8 +104,11 @@ func (s *Server) Run() {
 	if s.config.StoreInterval > 0 {
 		go s.AutoSave()
 	}
-
-	srv := &http.Server{Addr: s.config.Addr, Handler: s.router}
+	ln, err := net.Listen("tcp4", s.config.Addr)
+	srv := &http.Server{Handler: s.router}
+	if err != nil {
+		s.logger.Fatalw("cannot listen on tcp4", "error", err)
+	}
 
 	go func() {
 		stop := make(chan os.Signal, 1)
@@ -129,7 +133,7 @@ func (s *Server) Run() {
 	}()
 
 	s.logger.Infow("Starting server", "address", s.config.Addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
 }
