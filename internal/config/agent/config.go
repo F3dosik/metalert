@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v6"
@@ -101,15 +102,22 @@ func mergeConfigs(envConfig *AgentConfig, flagConfig *flagConfig) *AgentConfig {
 }
 
 func resolveEndpoint(envEndpoint, flagEndpoint string) string {
+	endpoint := ""
+
 	if envEndpoint != "" {
-		return envEndpoint
+		endpoint = envEndpoint
+	} else if flagEndpoint != defaultEndpoint {
+		endpoint = flagEndpoint
+	} else {
+		endpoint = defaultEndpoint
 	}
 
-	if flagEndpoint != defaultEndpoint {
-		return flagEndpoint
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		endpoint = "http://" + endpoint
 	}
 
-	return defaultEndpoint
+	return endpoint
+
 }
 
 func resolveInterval(envInterval time.Duration, flagInterval int, defaultInterval time.Duration) time.Duration {
