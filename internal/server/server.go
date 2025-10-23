@@ -99,31 +99,32 @@ func (s *Server) Run() {
 
 	srv := &http.Server{Addr: s.config.Addr, Handler: s.router}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+		<-stop
+
+		s.logger.Infow("Получен сигнал завершения, сохраняем метрики...")
+
+		if memStorage, ok := s.storage.(*repository.MemMetricsStorage); ok {
+			if err := memStorage.Close(); err != nil {
+				s.logger.Warnw("Ошибка при закрытии storage", "error", err)
+			}
 		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			s.logger.Fatalw(err.Error(), "event", "Принудительное завершение сервера")
+		}
+
+		s.logger.Infow("Сервер завершен")
 	}()
 
-	<-stop
-	s.logger.Infow("Получен сигнал завершения, сохраняем метрики...")
-
-	if memStorage, ok := s.storage.(*repository.MemMetricsStorage); ok {
-		if err := memStorage.Close(); err != nil {
-			s.logger.Warnw("Ошибка при закрытии storage", "error", err)
-		}
+	s.logger.Infow("Starting server", "address", s.config.Addr)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		s.logger.Fatalw(err.Error(), "event", "Принудительное завершение сервера")
-	}
-
-	s.logger.Infow("Сервер завершен")
 }
 
 func (s *Server) AutoSave() {
