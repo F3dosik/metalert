@@ -104,11 +104,29 @@ func (s *Server) Run() {
 	if s.config.StoreInterval > 0 {
 		go s.AutoSave()
 	}
+
 	ln, err := net.Listen("tcp4", s.config.Addr)
-	srv := &http.Server{Handler: s.router}
 	if err != nil {
 		s.logger.Fatalw("cannot listen on tcp4", "error", err)
 	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		conn, err := net.DialTimeout("tcp4", s.config.Addr, 200*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			break
+		}
+		select {
+		case <-waitCtx.Done():
+			s.logger.Fatalw("Не удалось открыть порт для тестов", "addr", s.config.Addr)
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
+	srv := &http.Server{Handler: s.router}
 
 	go func() {
 		stop := make(chan os.Signal, 1)

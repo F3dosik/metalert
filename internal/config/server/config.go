@@ -119,10 +119,6 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig
 	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
 	config.UseDB = false
 
-	if strings.HasPrefix(config.Addr, "localhost:") {
-		config.Addr = "127.0.0.1:" + strings.Split(config.Addr, ":")[1]
-	}
-
 	return config
 }
 
