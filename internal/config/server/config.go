@@ -22,23 +22,20 @@ type ServerConfig struct {
 	Restore         bool   `env:"RESTORE"`
 
 	DatabaseDSN string `env:"DATABASE_DSN"`
-	UseDB       bool   `env:"USE_DB"`
 }
 
 var (
 	errEmptyAddr = errors.New("address can't be empty")
 	errEmptyPort = errors.New("server address must contain port")
-	errEmptyDSN  = errors.New("DATABASE_DSN cannot be empty")
 )
 
 const (
 	defaultAddr            = "localhost:8080"
 	defaultLogMode         = string(logger.ModeDevelopment)
 	defaultStoreInterval   = 300 * time.Second
-	defaultFileStoragePath = "var/metrics.json"
+	defaultFileStoragePath = ""
 	defaultRestore         = false
-	// defaultDSN             = "postgres://server:YandexPracticum@localhost:5432/metalert?sslmode=disable"
-	defaultDSN = ""
+	defaultDSN             = ""
 )
 
 func (c *ServerConfig) Validate() error {
@@ -56,9 +53,6 @@ func (c *ServerConfig) Validate() error {
 		return fmt.Errorf("invalid log mode: %s, allowed: development, production", c.LogMode)
 	}
 
-	// if c.UseDB && c.DatabaseDSN == "" {
-	// 	return errEmptyDSN
-	// }
 	return nil
 }
 
@@ -113,11 +107,10 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig
 
 	config.Addr = resolveString(envConfig.Addr, flagConfig.Address, defaultAddr)
 	config.LogMode = resolveString(envConfig.LogMode, flagConfig.LogMode, defaultLogMode)
-	config.StoreInterval = resolveDuration(envConfig.StoreInterval, flagConfig.StoreInterval, defaultStoreInterval)
+	config.StoreInterval = resolveDuration("STORE_INTERVAL", envConfig.StoreInterval, flagConfig.StoreInterval, defaultStoreInterval)
 	config.FileStoragePath = resolveString(envConfig.FileStoragePath, flagConfig.FileStoragePath, defaultFileStoragePath)
-	config.Restore = resolveBool(envConfig.Restore, flagConfig.Restore, defaultRestore)
+	config.Restore = resolveBool("RESTORE", envConfig.Restore, flagConfig.Restore, defaultRestore)
 	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
-	config.UseDB = false
 
 	return config
 }
@@ -132,8 +125,8 @@ func resolveString(envVal, flagVal, def string) string {
 	return def
 }
 
-func resolveDuration(envVal time.Duration, flagVal int, def time.Duration) time.Duration {
-	if _, ok := os.LookupEnv("STORE_INTERVAL"); ok {
+func resolveDuration(envName string, envVal time.Duration, flagVal int, def time.Duration) time.Duration {
+	if _, ok := os.LookupEnv(envName); ok {
 		return envVal
 	}
 	if flagVal >= 0 {
@@ -142,8 +135,8 @@ func resolveDuration(envVal time.Duration, flagVal int, def time.Duration) time.
 	return def
 }
 
-func resolveBool(envVal, flagVal, def bool) bool {
-	if _, ok := os.LookupEnv("RESTORE"); ok {
+func resolveBool(envName string, envVal, flagVal, def bool) bool {
+	if _, ok := os.LookupEnv(envName); ok {
 		return envVal
 	}
 	if flagVal {
