@@ -86,7 +86,7 @@ func TestUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage, _ := repository.NewMemMetricsStorage("tmp", false)
+			storage := repository.NewMemMetricsStorage()
 
 			baseLogger, sugarLogger := logger.NewLogger("development")
 			defer func() { _ = baseLogger.Sync() }()

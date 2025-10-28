@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"testing"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
@@ -39,7 +40,7 @@ func TestUpdateGauge(t *testing.T) {
 				storage.Gauges[k] = v
 			}
 
-			storage.SetGauge(tt.metricName, tt.metricValue)
+			storage.SetGauge(context.TODO(), tt.metricName, tt.metricValue)
 
 			if got := storage.Gauges[tt.metricName]; got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)
@@ -81,7 +82,7 @@ func TestUpdateCounter(t *testing.T) {
 				storage.Counters[k] = v
 			}
 
-			storage.AddCounter(tt.metricName, tt.metricValue)
+			storage.AddCounter(context.TODO(), tt.metricName, tt.metricValue)
 
 			if got := storage.Counters[tt.metricName]; got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)

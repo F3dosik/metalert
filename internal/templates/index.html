@@ -9,40 +9,28 @@
 <table border="1">
   <thead>
     <tr>
-      <th colspan="2">Gauges</th>
-    </tr>
-    <tr>
-      <th>metName</th>
-      <th>metValue</th>
+      <th>Name</th>
+      <th>Value</th>
+      <th>Type</th>
     </tr>
   </thead>
   <tbody>
-    {{range $key, $value := .Gauges}}
+    {{range .}}
     <tr>
-      <td>{{$key}}</td>
-      <td>{{$value}}</td>
-    </tr>
-    {{end}}
-  </tbody>
-
-  <thead>
-    <tr>
-      <th colspan="2">Counters</th>
-    </tr>
-    <tr>
-      <th>metName</th>
-      <th>metValue</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{range $key, $value := .Counters}}
-    <tr>
-      <td>{{$key}}</td>
-      <td>{{$value}}</td>
+      <td>{{.ID}}</td>
+      <td>
+        {{if eq .MType "gauge"}}
+          {{if .Value}}{{.Value}}{{else}}N/A{{end}}
+        {{else if eq .MType "counter"}}
+          {{if .Delta}}{{.Delta}}{{else}}N/A{{end}}
+        {{else}}
+          N/A
+        {{end}}
+      </td>
+      <td>{{.MType}}</td>
     </tr>
     {{end}}
   </tbody>
 </table>
-
 </body>
 </html>

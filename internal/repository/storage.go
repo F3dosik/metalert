@@ -1,16 +1,19 @@
 package repository
 
-import "github.com/F3dosik/metalert.git/pkg/models"
+import (
+	"context"
+
+	"github.com/F3dosik/metalert.git/pkg/models"
+)
 
 type MetricsStorage interface {
-	SetGauge(name string, value models.Gauge)
-	GetGauge(name string) (models.Gauge, error)
+	SetGauge(ctx context.Context, name string, value models.Gauge) error
+	GetGauge(ctx context.Context, name string) (models.Gauge, error)
 
-	SetCounter(name string, value models.Counter)
-	AddCounter(name string, value models.Counter)
-	GetCounter(name string) (models.Counter, error)
+	AddCounter(ctx context.Context, name string, value models.Counter) error
+	GetCounter(ctx context.Context, name string) (models.Counter, error)
 
-	GetAllMetrics() []models.Metric
+	GetAllMetrics(ctx context.Context) ([]models.Metric, error)
 }
 
 type Savable interface {

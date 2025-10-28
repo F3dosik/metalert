@@ -1,24 +1,26 @@
 package service
 
 import (
+	"context"
+
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
-func UpdateMetric(storage repository.MetricsStorage, metName string, metValue any) {
+func UpdateMetric(ctx context.Context, storage repository.MetricsStorage, metName string, metValue any) {
 	switch v := metValue.(type) {
 	case models.Gauge:
-		storage.SetGauge(metName, v)
+		storage.SetGauge(ctx, metName, v)
 	case models.Counter:
-		storage.AddCounter(metName, v)
+		storage.AddCounter(ctx, metName, v)
 	}
 }
 
-func UpdateMetricFromStruct(storage repository.MetricsStorage, met models.Metric) {
+func UpdateMetricFromStruct(ctx context.Context, storage repository.MetricsStorage, met models.Metric) {
 	switch met.MType {
 	case models.TypeGauge:
-		UpdateMetric(storage, met.ID, *met.Value)
+		UpdateMetric(ctx, storage, met.ID, *met.Value)
 	case models.TypeCounter:
-		UpdateMetric(storage, met.ID, *met.Delta)
+		UpdateMetric(ctx, storage, met.ID, *met.Delta)
 	}
 }

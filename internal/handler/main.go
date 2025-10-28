@@ -6,24 +6,33 @@ import (
 
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/F3dosik/metalert.git/internal/templates"
+	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
 func MainHandler(storage repository.MetricsStorage) http.HandlerFunc {
-	return func(rw http.ResponseWriter, r *http.Request) {
-		mainPage(rw, storage)
+	return func(w http.ResponseWriter, r *http.Request) {
+		mainPage(w, r, storage)
 	}
 }
 
-func mainPage(rw http.ResponseWriter, storage repository.MetricsStorage) {
+func mainPage(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage) {
 	tmpl, err := template.ParseFS(templates.TemplatesFS, "index.html")
 	if err != nil {
-		http.Error(rw, errTemplateParsing.Error()+err.Error(), http.StatusInternalServerError)
+		http.Error(w, errTemplateParsing.Error()+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	err = tmpl.Execute(rw, storage)
+	ctx := r.Context()
+	var metrics []models.Metric
+	metrics, err = storage.GetAllMetrics(ctx)
 	if err != nil {
-		http.Error(rw, errTemplateRenderind.Error()+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to load metrics: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = tmpl.Execute(w, metrics)
+	if err != nil {
+		http.Error(w, errTemplateRenderind.Error()+err.Error(), http.StatusInternalServerError)
 		return
 	}
 }

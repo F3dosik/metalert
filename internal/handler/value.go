@@ -20,6 +20,7 @@ func ValueHandler(storage repository.MetricsStorage) http.HandlerFunc {
 
 func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsStorage) {
 	var metName string
+	ctx := r.Context()
 	metType := models.MetricType(chi.URLParam(r, "metType"))
 	metName = chi.URLParam(r, "metName")
 
@@ -32,7 +33,7 @@ func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 	var message string
 	switch metType {
 	case models.TypeGauge:
-		val, err := storage.GetGauge(metName)
+		val, err := storage.GetGauge(ctx, metName)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusNotFound)
 			return
@@ -40,7 +41,7 @@ func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 		message = strconv.FormatFloat(float64(val), 'f', -1, 64)
 
 	case models.TypeCounter:
-		val, err := storage.GetCounter(metName)
+		val, err := storage.GetCounter(ctx, metName)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusNotFound)
 			return
@@ -60,6 +61,7 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.Metric
 	logger.Debug("decoding request")
 
 	var metric models.Metric
+	ctx := r.Context()
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&metric); err != nil {
 		logger.Debug("cannot decode metric JSON body", zap.Error(err))
@@ -76,7 +78,7 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.Metric
 	message := metric
 	switch metric.MType {
 	case models.TypeGauge:
-		val, err := storage.GetGauge(metric.ID)
+		val, err := storage.GetGauge(ctx, metric.ID)
 		if err != nil {
 			logger.Debug("cannot GetGauge", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -86,7 +88,7 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.Metric
 		message.Value = &val
 
 	case models.TypeCounter:
-		val, err := storage.GetCounter(metric.ID)
+		val, err := storage.GetCounter(ctx, metric.ID)
 		if err != nil {
 			logger.Debug("cannot GetCounter", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusNotFound)

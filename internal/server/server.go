@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,55 +18,49 @@ import (
 )
 
 type Server struct {
-	config    *cfg.ServerConfig
-	storage   repository.MetricsStorage
-	dbStorage *repository.DBMetricStorage
-	router    chi.Router
-	logger    *zap.SugaredLogger
+	config  *cfg.ServerConfig
+	storage repository.MetricsStorage
+	router  chi.Router
+	logger  *zap.SugaredLogger
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
-	// var storage repository.MetricsStorage
-	// var err error
+	ctx, cancel := context.WithCancel(context.Background())
 
-	var DBstorage *repository.DBMetricStorage
+	var storage repository.MetricsStorage
 	var err error
 
 	if cfg.DatabaseDSN != "" {
-		DBstorage, err = repository.NewDBMetricStorage(cfg.DatabaseDSN)
+		storage, err = repository.NewDBMetricStorage(cfg.DatabaseDSN)
 		if err != nil {
 			logger.Warnw("failed to create DBMetricStorage", "error", err)
 		}
-	} else {
-		logger.Infow("Database DSN not set — using memory storage only")
-	}
-
-	storage, err := repository.NewMemMetricsStorage(cfg.FileStoragePath, cfg.Restore)
-	if err != nil {
-		logger.Warnw("failed to create New MemMetricStorage", "error", err)
-	}
-	// if memStorage, ok := storage.(*repository.MemMetricsStorage); ok {
-	// 	go func() {
-	// 		for err := range memStorage.ErrCh {
-	// 			logger.Warnw("failed to save metrics", "error", err)
-	// 		}
-	// 	}()
-	// }
-
-	go func() {
-		for err := range storage.ErrCh {
-			logger.Warnw("failed to save metrics", "error", err)
+		logger.Infow("Storage selected", "type", "DB", "database", cfg.DatabaseDSN)
+	} else if cfg.FileStoragePath != "" {
+		logger.Infow("Database DSN not set — using file storage only")
+		storage, err = repository.NewFileMetricsStorage(cfg.FileStoragePath, cfg.Restore)
+		if err != nil {
+			logger.Warnw("failed to create New FileMetricStorage", "error", err)
 		}
-	}()
+		logger.Infow("Storage selected", "type", "File", "file_path", cfg.FileStoragePath)
+	} else {
+		logger.Infow("Database DSN and filesStoragePath not set — using memory storage only")
+		storage = repository.NewMemMetricsStorage()
+		logger.Infow("Storage selected", "type", "Memory")
+
+	}
 
 	r := chi.NewRouter()
 
 	server := &Server{
-		config:    cfg,
-		storage:   storage,
-		dbStorage: DBstorage,
-		router:    r,
-		logger:    logger,
+		config:  cfg,
+		storage: storage,
+		router:  r,
+		logger:  logger,
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 	server.routes()
 
@@ -87,7 +80,7 @@ func (s *Server) routes() {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
 	})
-	s.router.Get("/ping", handler.PingDB(s.dbStorage, s.config.UseDB, s.logger))
+	s.router.Get("/ping", handler.PingDB(s.storage, s.logger))
 }
 
 func (s *Server) Run() {
@@ -98,45 +91,31 @@ func (s *Server) Run() {
 		"file_path", s.config.FileStoragePath,
 		"restore", s.config.Restore,
 		"DatabaseDSN", s.config.DatabaseDSN,
-		"UseDB", s.config.UseDB,
 	)
 
-	if s.config.StoreInterval > 0 {
+	if _, ok := s.storage.(repository.Savable); s.config.StoreInterval > 0 && ok {
 		go s.AutoSave()
 	}
 
-	ln, err := net.Listen("tcp4", s.config.Addr)
-	if err != nil {
-		s.logger.Fatalw("cannot listen on tcp4", "error", err)
+	srv := &http.Server{
+		Addr:    s.config.Addr,
+		Handler: s.router,
 	}
 
-	waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for {
-		conn, err := net.DialTimeout("tcp4", s.config.Addr, 200*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			break
-		}
-		select {
-		case <-waitCtx.Done():
-			s.logger.Fatalw("Не удалось открыть порт для тестов", "addr", s.config.Addr)
-		default:
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	srv := &http.Server{Handler: s.router}
-
+	// graceful shutdown
 	go func() {
+
 		stop := make(chan os.Signal, 1)
 		signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 		<-stop
 
 		s.logger.Infow("Получен сигнал завершения, сохраняем метрики...")
 
-		if memStorage, ok := s.storage.(*repository.MemMetricsStorage); ok {
-			if err := memStorage.Close(); err != nil {
+		if fileStorage, ok := s.storage.(*repository.FileMetricsStorage); ok {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+
+			if err := fileStorage.Close(ctx); err != nil {
 				s.logger.Warnw("Ошибка при закрытии storage", "error", err)
 			}
 		}
@@ -150,20 +129,18 @@ func (s *Server) Run() {
 		s.logger.Infow("Сервер завершен")
 	}()
 
-	s.logger.Infow("Starting server", "address", s.config.Addr)
-	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
 }
 
 func (s *Server) AutoSave() {
-	s.logger.Infow("Включено автосохранение метрик", "interval", s.config.StoreInterval)
-
 	savable, ok := s.storage.(repository.Savable)
 	if !ok {
 		s.logger.Warn("Хранилище не поддерживает автосохранение")
 		return
 	}
+	s.logger.Infow("Включено автосохранение метрик", "interval", s.config.StoreInterval)
 
 	ticker := time.NewTicker(s.config.StoreInterval)
 	defer ticker.Stop()

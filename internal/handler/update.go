@@ -37,7 +37,7 @@ func update(w http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 		return
 	}
 
-	service.UpdateMetric(storage, metName, value)
+	service.UpdateMetric(r.Context(), storage, metName, value)
 
 	message := fmt.Sprint("Метрика ", metName, " успешно обновлена\r\n")
 	RespondTextOK(w, message)
@@ -71,7 +71,7 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.Metri
 		return
 	}
 
-	service.UpdateMetricFromStruct(storage, metric)
+	service.UpdateMetricFromStruct(r.Context(), storage, metric)
 
 	if saveOnUpdate {
 		if s, ok := storage.(repository.Savable); ok {

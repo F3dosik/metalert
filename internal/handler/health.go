@@ -11,10 +11,9 @@ var (
 	errPingFailed = "Database connection failed"
 )
 
-func PingDB(storage repository.MetricsStorage, useDB bool, logger *zap.SugaredLogger) http.HandlerFunc {
+func PingDB(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// if useDB {
-		dbStorage, ok := storage.(*repository.DBMetricStorage)
+		dbStorage, ok := storage.(*repository.DBMetricsStorage)
 		if !ok {
 			http.Error(w, "DB not initialized", http.StatusInternalServerError)
 			return
@@ -26,8 +25,5 @@ func PingDB(storage repository.MetricsStorage, useDB bool, logger *zap.SugaredLo
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		// }
-		// w.WriteHeader(http.StatusNotFound)
-		// w.Write([]byte("No DB"))
 	})
 }
