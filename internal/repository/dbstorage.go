@@ -7,14 +7,37 @@ import (
 	"time"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 )
+
+func runMigrations(dsn string) error {
+	m, err := migrate.New(
+		"file://migrations",
+		dsn,
+	)
+	if err != nil {
+		return fmt.Errorf("create migrate instance: %w", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+
+	return nil
+}
 
 type DBMetricsStorage struct {
 	db *sql.DB
 }
 
 func NewDBMetricStorage(dsn string) (*DBMetricsStorage, error) {
+	if err := runMigrations(dsn); err != nil {
+		return nil, fmt.Errorf("migrations failed: %w", err)
+	}
+
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, err
@@ -124,11 +147,11 @@ func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, 
 		metrics = append(metrics, metric)
 	}
 
-	if err := rows.Err(); err != nil{
+	if err := rows.Err(); err != nil {
 		return nil, err
 
 	}
-	
+
 	return metrics, nil
 }
 
