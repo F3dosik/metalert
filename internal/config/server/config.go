@@ -7,16 +7,15 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/F3dosik/metalert.git/pkg/logger"
 	"github.com/caarlos0/env/v6"
 )
 
 type ServerConfig struct {
-	Addr          string        `env:"ADDRESS"`
-	LogMode       string        `env:"LOG_MODE"`
-	StoreInterval time.Duration `env:"STORE_INTERVAL"`
+	Addr          string `env:"ADDRESS"`
+	LogMode       string `env:"LOG_MODE"`
+	StoreInterval int    `env:"STORE_INTERVAL"`
 
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
@@ -32,7 +31,7 @@ var (
 const (
 	defaultAddr            = "localhost:8080"
 	defaultLogMode         = string(logger.ModeDevelopment)
-	defaultStoreInterval   = 300 * time.Second
+	defaultStoreInterval   = 300
 	defaultFileStoragePath = ""
 	defaultRestore         = false
 	defaultDSN             = ""
@@ -125,12 +124,12 @@ func resolveString(envVal, flagVal, def string) string {
 	return def
 }
 
-func resolveDuration(envName string, envVal time.Duration, flagVal int, def time.Duration) time.Duration {
+func resolveDuration(envName string, envVal, flagVal, def int) int {
 	if _, ok := os.LookupEnv(envName); ok {
 		return envVal
 	}
 	if flagVal >= 0 {
-		return time.Duration(flagVal) * time.Second
+		return flagVal
 	}
 	return def
 }

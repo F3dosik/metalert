@@ -142,7 +142,7 @@ func (s *Server) AutoSave() {
 	}
 	s.logger.Infow("Включено автосохранение метрик", "interval", s.config.StoreInterval)
 
-	ticker := time.NewTicker(s.config.StoreInterval)
+	ticker := time.NewTicker(time.Duration(s.config.StoreInterval) * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
