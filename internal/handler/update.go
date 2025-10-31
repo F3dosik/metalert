@@ -128,10 +128,14 @@ func updateMetrics(ctx context.Context, storage repository.MetricsStorage, metri
 
 	switch s := storage.(type) {
 	case *repository.DBMetricsStorage:
-
+		if err := s.UpdateMetricTx(ctx, metrics); err != nil {
+			return err
+		}
 	default:
 		for _, metric := range metrics {
-			service.UpdateMetricFromStruct(ctx, s, metric)
+			if err := service.UpdateMetricFromStruct(ctx, s, metric); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

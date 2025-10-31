@@ -8,9 +8,9 @@ import (
 
 	"github.com/F3dosik/metalert.git/pkg/models"
 	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 )
 
 func runMigrations(dsn string) error {
@@ -153,6 +153,43 @@ func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, 
 	}
 
 	return metrics, nil
+}
+
+func (s *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.Metric) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	query := `
+		INSERT INTO metrics (id, type, value, delta)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO UPDATE 
+		SET 
+			value = COALESCE(EXCLUDED.value, metrics.value),
+			delta = COALESCE(metrics.delta + EXCLUDED.delta, metrics.delta);
+	`
+	stmt, err := tx.PrepareContext(ctx, query)
+
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.TypeGauge:
+			_, err := stmt.ExecContext(ctx, metric.ID, "gauge", metric.Value, nil)
+			if err != nil {
+				return fmt.Errorf("failed to update gauge %s: %w", metric.ID, err)
+			}
+		case models.TypeCounter:
+			_, err := stmt.ExecContext(ctx, metric.ID, "counter", nil, metric.Delta)
+			if err != nil {
+				return fmt.Errorf("failed to update counter %s: %w", metric.ID, err)
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 func (d *DBMetricsStorage) Ping() error {
