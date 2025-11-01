@@ -155,8 +155,8 @@ func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, 
 	return metrics, nil
 }
 
-func (s *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.Metric) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+func (d *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.Metric) error {
+	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
