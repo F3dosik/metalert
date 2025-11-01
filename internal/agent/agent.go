@@ -8,7 +8,6 @@ import (
 )
 
 func Run(endpoint string, reportInterval, pollInterval time.Duration) {
-
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),

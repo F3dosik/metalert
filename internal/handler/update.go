@@ -115,7 +115,7 @@ func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.Metr
 		}
 	}
 	logger.Debug("sending HTTP 200 response")
-	message := fmt.Sprint("Успешно обновлено ", len(metrics), "метрик\r\n")
+	message := fmt.Sprint("Успешно обновлено ", len(metrics), " метрик\r\n")
 	RespondTextOK(w, message)
 }
 

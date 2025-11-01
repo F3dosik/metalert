@@ -74,10 +74,11 @@ func (s *Server) routes() {
 	s.router.Get("/", handler.MainHandler(s.storage))
 	_, isSavable := s.storage.(repository.Savable)
 	asyncSave := isSavable && s.config.StoreInterval == 0
-	s.router.Route("/update", func(r chi.Router) {
+	s.router.Route("/update/", func(r chi.Router) {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.logger, asyncSave))
 		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage, s.logger))
 	})
+	s.router.With(middleware.RequireJSON(s.logger)).Post("/updates/", handler.UpdatesJSONHandler(s.storage, s.logger, asyncSave))
 	s.router.Route("/value", func(r chi.Router) {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
