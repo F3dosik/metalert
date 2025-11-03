@@ -23,6 +23,7 @@ require (
 require (
 	github.com/caarlos0/env/v6 v6.10.1
 	github.com/golang-migrate/migrate/v4 v4.19.0
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.6
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.38.0 // indirect
