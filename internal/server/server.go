@@ -22,12 +22,12 @@ type Server struct {
 	storage repository.MetricsStorage
 	router  chi.Router
 	logger  *zap.SugaredLogger
-	ctx     context.Context
-	cancel  context.CancelFunc
+	//ctx     context.Context
+	//cancel  context.CancelFunc
 }
 
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
-	ctx, cancel := context.WithCancel(context.Background())
+	//ctx, cancel := context.WithCancel(context.Background())
 
 	var storage repository.MetricsStorage
 	var err error
@@ -59,8 +59,8 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 		storage: storage,
 		router:  r,
 		logger:  logger,
-		ctx:     ctx,
-		cancel:  cancel,
+		//ctx:     ctx,
+		//cancel:  cancel,
 	}
 	server.routes()
 
