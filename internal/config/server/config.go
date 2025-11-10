@@ -21,6 +21,8 @@ type ServerConfig struct {
 	Restore         bool   `env:"RESTORE"`
 
 	DatabaseDSN string `env:"DATABASE_DSN"`
+
+	Key string `env:"KEY"`
 }
 
 var (
@@ -35,6 +37,7 @@ const (
 	defaultFileStoragePath = ""
 	defaultRestore         = false
 	defaultDSN             = ""
+	defaultKey             = ""
 )
 
 func (c *ServerConfig) Validate() error {
@@ -85,6 +88,7 @@ type flagConfig struct {
 	FileStoragePath string
 	Restore         bool
 	DatabaseDSN     string
+	Key             string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -96,6 +100,7 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.FileStoragePath, "f", "", "file storage path")
 	flag.BoolVar(&config.Restore, "r", false, "restore metrics from file")
 	flag.StringVar(&config.DatabaseDSN, "d", "", "PostgreSQL DSN")
+	flag.StringVar(&config.Key, "k", "", "key for hash")
 	flag.Parse()
 
 	return &config
@@ -110,6 +115,7 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig
 	config.FileStoragePath = resolveString(envConfig.FileStoragePath, flagConfig.FileStoragePath, defaultFileStoragePath)
 	config.Restore = resolveBool("RESTORE", envConfig.Restore, flagConfig.Restore, defaultRestore)
 	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
+	config.Key = resolveString(envConfig.Key, flagConfig.Key, defaultKey)
 
 	return config
 }

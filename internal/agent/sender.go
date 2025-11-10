@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,14 +20,16 @@ import (
 type Sender struct {
 	ServerURL string
 	Client    *resty.Client
+	Key       string
 }
 
-func NewSender(serverURL string) *Sender {
+func NewSender(serverURL, key string) *Sender {
 	client := resty.New()
 	client.SetTimeout(5 * time.Second)
 	return &Sender{
 		ServerURL: serverURL,
 		Client:    client,
+		Key:       key,
 	}
 }
 
@@ -119,6 +124,12 @@ func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 	if err != nil {
 		return fmt.Errorf("ошибка сериализации: %w", err)
 	}
+	var hash string
+	if s.Key != "" {
+		h := hmac.New(sha256.New, []byte(s.Key))
+		h.Write(jsonData)
+		hash = hex.EncodeToString(h.Sum(nil))
+	}
 
 	if compress {
 		if jsonData, err = compression.Compress(jsonData); err != nil {
@@ -132,6 +143,10 @@ func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 
 	if compress {
 		req.SetHeader("Content-Encoding", "gzip")
+	}
+
+	if s.Key != "" {
+		req.SetHeader("HashSHA256", hash)
 	}
 
 	resp, err := req.Post(fullURL)

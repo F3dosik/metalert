@@ -72,17 +72,22 @@ func (s *Server) routes() {
 	s.router.Use(middleware.WithLogging(s.logger))
 
 	s.router.Get("/", handler.MainHandler(s.storage))
+
 	_, isSavable := s.storage.(repository.Savable)
 	asyncSave := isSavable && s.config.StoreInterval == 0
 	s.router.Route("/update/", func(r chi.Router) {
-		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.logger, asyncSave))
+		r.With(middleware.RequireJSON(s.logger), middleware.VerifySignature(s.config.Key, s.logger)).
+		Post("/", handler.UpdateJSONHandler(s.storage, s.logger, asyncSave))
 		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage, s.logger))
 	})
-	s.router.With(middleware.RequireJSON(s.logger)).Post("/updates/", handler.UpdatesJSONHandler(s.storage, s.logger, asyncSave))
+	s.router.With(middleware.RequireJSON(s.logger), middleware.VerifySignature(s.config.Key, s.logger)).
+	Post("/updates/", handler.UpdatesJSONHandler(s.storage, s.logger, asyncSave))
+	
 	s.router.Route("/value", func(r chi.Router) {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
 	})
+
 	s.router.Get("/ping", handler.PingDB(s.storage, s.logger))
 }
 
