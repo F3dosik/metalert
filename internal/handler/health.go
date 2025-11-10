@@ -23,7 +23,7 @@ func PingDB(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.H
 			logger.Errorw(errPingFailed, "err", err)
 			http.Error(w, errPingFailed, http.StatusInternalServerError)
 			return
-		}
+		}       
 		w.WriteHeader(http.StatusOK)
 	})
 }
