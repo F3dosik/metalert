@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"runtime"
 	"sync"
 
 	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type Metrics struct {
@@ -14,7 +17,14 @@ type Metrics struct {
 	mu       sync.RWMutex
 }
 
-var getters = map[string]func(*runtime.MemStats) models.Gauge{
+func NewMetrics() *Metrics {
+	return &Metrics{
+		Gauges:   make(map[string]models.Gauge),
+		Counters: make(map[string]models.Counter),
+	}
+}
+
+var gettersRuntime = map[string]func(*runtime.MemStats) models.Gauge{
 	"Alloc":         func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.Alloc) },
 	"BuckHashSys":   func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.BuckHashSys) },
 	"Frees":         func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.Frees) },
@@ -44,20 +54,61 @@ var getters = map[string]func(*runtime.MemStats) models.Gauge{
 	"TotalAlloc":    func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.TotalAlloc) },
 }
 
-func (m *Metrics) Update() {
+func (m *Metrics) UpdateGopsutilMetrics() {
+	vm, err := mem.VirtualMemory()
+	if err != nil {
+		return
+	}
+
+	cpuPercensts, err := cpu.Percent(0, true)
+	if err != nil {
+		return
+	}
+
+	m.Gauges["TotalMemory"] = models.Gauge(vm.Total)
+	m.Gauges["FreeMemory"] = models.Gauge(vm.Free)
+
+	for i, percent := range cpuPercensts {
+		m.Gauges[fmt.Sprintf("CPUutilization%d", i+1)] = models.Gauge(percent)
+	}
+}
+
+func (m *Metrics) UpdateRuntimeMetrics() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Обновление метрик runtime
-	for name, getter := range getters {
+	for name, getter := range gettersRuntime {
 		m.Gauges[name] = getter(&memStats)
 	}
 
-	randomValue := rand.Float64() * 100
-	m.Gauges["RandomValue"] = models.Gauge(randomValue)
-
+	m.Gauges["RandomValue"] = models.Gauge(rand.Float64() * 100)
 	m.Counters["PollCount"]++
+}
+
+type MetricsSnapshot struct {
+	Gauges   map[string]models.Gauge
+	Counters map[string]models.Counter
+}
+
+func (m *Metrics) Snapshot() MetricsSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	gauges := make(map[string]models.Gauge, len(m.Gauges))
+	for k, v := range m.Gauges {
+		gauges[k] = v
+	}
+
+	counters := make(map[string]models.Counter, len(m.Counters))
+	for k, v := range m.Counters {
+		counters[k] = v
+	}
+
+	return MetricsSnapshot{
+		Gauges:   gauges,
+		Counters: counters,
+	}
 }

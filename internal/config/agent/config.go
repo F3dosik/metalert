@@ -15,18 +15,21 @@ type AgentConfig struct {
 	Endpoint       string        `env:"ADDRESS"`
 	ReportInterval time.Duration `env:"REPORT_INTERVAL"`
 	PollInterval   time.Duration `env:"POLL_INTERVAL"`
+	RateLimit      int           `env:"RATE_LIMIT"`
 }
 
 var (
 	errEmptyEndpoint    = errors.New("endpoint can't be empty")
 	errInvalidReportInt = errors.New("report interval must be positive")
 	errInvalidPollInt   = errors.New("poll interval must be positive")
+	errInvalidRateLimit = errors.New("rate limit must be positive")
 )
 
 const (
 	defaultEndpoint       = "http://localhost:8080"
 	defaultReportInterval = 10 * time.Second
 	defaultPollInterval   = 2 * time.Second
+	defaultRateLimit      = 1
 )
 
 func (c *AgentConfig) Validate() error {
@@ -40,6 +43,10 @@ func (c *AgentConfig) Validate() error {
 
 	if c.PollInterval <= 0 {
 		return errInvalidPollInt
+	}
+
+	if c.RateLimit < 0 {
+		return errInvalidRateLimit
 	}
 
 	return nil
@@ -78,6 +85,7 @@ type flagConfig struct {
 	Endpoint       string
 	ReportInterval int
 	PollInterval   int
+	RateLimit      int
 }
 
 func parseFlagConfig() *flagConfig {
@@ -86,6 +94,7 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.Endpoint, "a", defaultEndpoint, "HTTP server endpoint address")
 	flag.IntVar(&config.ReportInterval, "r", int(defaultReportInterval.Seconds()), "frequency of sending metrics to the server (seconds)")
 	flag.IntVar(&config.PollInterval, "p", int(defaultPollInterval.Seconds()), "frequency of polling metrics from runtime (seconds)")
+	flag.IntVar(&config.RateLimit, "l", int(defaultRateLimit), "limit on the number of simultaneous outgoing requests to the server")
 	flag.Parse()
 
 	return &config
@@ -97,6 +106,7 @@ func mergeConfigs(envConfig *AgentConfig, flagConfig *flagConfig) *AgentConfig {
 	config.Endpoint = resolveEndpoint(envConfig.Endpoint, flagConfig.Endpoint)
 	config.ReportInterval = resolveInterval(envConfig.ReportInterval, flagConfig.ReportInterval, defaultReportInterval)
 	config.PollInterval = resolveInterval(envConfig.PollInterval, flagConfig.PollInterval, defaultPollInterval)
+	config.RateLimit = resolveInt(envConfig.RateLimit, flagConfig.RateLimit, defaultRateLimit)
 
 	return config
 }
@@ -130,4 +140,16 @@ func resolveInterval(envInterval time.Duration, flagInterval int, defaultInterva
 	}
 
 	return defaultInterval
+}
+
+func resolveInt(envInt, flagInt, defaultInt int) int {
+	if envInt > 0 {
+		return envInt
+	}
+
+	if flagInt > 0 {
+		return flagInt
+	}
+
+	return defaultInt
 }

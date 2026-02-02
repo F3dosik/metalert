@@ -28,15 +28,12 @@ func NewSender(serverURL string) *Sender {
 	}
 }
 
-func (s *Sender) SendMetrics(memMetrics *Metrics, sendType string, compress bool) {
-	memMetrics.mu.RLock()
-	defer memMetrics.mu.RUnlock()
-
+func (s *Sender) SendMetrics(snapshot MetricsSnapshot, sendType string, compress bool) {
 	switch sendType {
 	case "URL":
-		s.sendMetricsIndividually(memMetrics)
+		s.sendMetricsIndividually(snapshot)
 	case "JSON":
-		s.sendMetricsBatch(memMetrics, compress)
+		s.sendMetricsBatch(snapshot, compress)
 	default:
 		log.Printf("Неизвестный тип отправки: %s", sendType)
 	}
@@ -66,9 +63,9 @@ func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricV
 	return nil
 }
 
-func (s *Sender) sendMetricsIndividually(memMetrics *Metrics) {
+func (s *Sender) sendMetricsIndividually(snapshot MetricsSnapshot) {
 	metricType := models.TypeGauge
-	for metricName, val := range memMetrics.Gauges {
+	for metricName, val := range snapshot.Gauges {
 		metricValue := strconv.FormatFloat(float64(val), 'f', -1, 64)
 
 		err := s.sendMetricURL(metricType, metricName, metricValue)
@@ -77,7 +74,7 @@ func (s *Sender) sendMetricsIndividually(memMetrics *Metrics) {
 		}
 	}
 	metricType = models.TypeCounter
-	for metricName, val := range memMetrics.Counters {
+	for metricName, val := range snapshot.Counters {
 		metricValue := strconv.Itoa(int(val))
 
 		err := s.sendMetricURL(metricType, metricName, metricValue)
@@ -87,9 +84,9 @@ func (s *Sender) sendMetricsIndividually(memMetrics *Metrics) {
 	}
 }
 
-func (s *Sender) sendMetricsBatch(memMetrics *Metrics, compress bool) {
+func (s *Sender) sendMetricsBatch(snapshot MetricsSnapshot, compress bool) {
 	var metrics []models.Metric
-	for id, v := range memMetrics.Gauges {
+	for id, v := range snapshot.Gauges {
 		value := v
 		metric := models.Metric{
 			ID:    id,
@@ -98,7 +95,7 @@ func (s *Sender) sendMetricsBatch(memMetrics *Metrics, compress bool) {
 		}
 		metrics = append(metrics, metric)
 	}
-	for id, d := range memMetrics.Counters {
+	for id, d := range snapshot.Counters {
 		delta := d
 		metric := models.Metric{
 			ID:    id,
