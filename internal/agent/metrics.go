@@ -65,6 +65,9 @@ func (m *Metrics) UpdateGopsutilMetrics() {
 		return
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.Gauges["TotalMemory"] = models.Gauge(vm.Total)
 	m.Gauges["FreeMemory"] = models.Gauge(vm.Free)
 
