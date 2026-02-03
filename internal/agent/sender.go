@@ -35,7 +35,7 @@ func (s *Sender) SendMetrics(snapshot MetricsSnapshot, sendType string, compress
 	case "JSON":
 		return s.sendMetricsBatch(snapshot, compress)
 	default:
-		return fmt.Errorf("Неизвестный тип отправки: %s", sendType)
+		return fmt.Errorf("неизвестный тип отправки: %s", sendType)
 	}
 }
 
