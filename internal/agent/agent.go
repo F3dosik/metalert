@@ -30,7 +30,9 @@ func Run(ctx context.Context, endpoint string, reportInterval, pollInterval time
 		go func(id int) {
 			defer wg.Done()
 			for snapshot := range sendCh {
-				sender.SendMetrics(snapshot, "JSON", true)
+				if err := sender.SendMetrics(snapshot, "JSON", true); err != nil {
+					log.Printf("send metrics error: %v", err)
+				}
 			}
 		}(i)
 	}
@@ -45,19 +47,6 @@ func Run(ctx context.Context, endpoint string, reportInterval, pollInterval time
 				return
 			case <-ticker.C:
 				metrics.UpdateRuntimeMetrics()
-			}
-		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(pollInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
 				metrics.UpdateGopsutilMetrics()
 			}
 		}

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"runtime"
 	"sync"
@@ -57,11 +58,13 @@ var gettersRuntime = map[string]func(*runtime.MemStats) models.Gauge{
 func (m *Metrics) UpdateGopsutilMetrics() {
 	vm, err := mem.VirtualMemory()
 	if err != nil {
+		log.Printf("gopsutil: VirtualMemory error: %v", err)
 		return
 	}
 
 	cpuPercensts, err := cpu.Percent(0, true)
 	if err != nil {
+		log.Printf("gopsutil: CPU percent error: %v", err)
 		return
 	}
 
