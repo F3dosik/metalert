@@ -28,17 +28,14 @@ func NewSender(serverURL string) *Sender {
 	}
 }
 
-func (s *Sender) SendMetrics(memMetrics *Metrics, sendType string, compress bool) {
-	memMetrics.mu.RLock()
-	defer memMetrics.mu.RUnlock()
-
+func (s *Sender) SendMetrics(snapshot MetricsSnapshot, sendType string, compress bool) error {
 	switch sendType {
 	case "URL":
-		s.sendMetricsIndividually(memMetrics)
+		return s.sendMetricsIndividually(snapshot)
 	case "JSON":
-		s.sendMetricsBatch(memMetrics, compress)
+		return s.sendMetricsBatch(snapshot, compress)
 	default:
-		log.Printf("Неизвестный тип отправки: %s", sendType)
+		return fmt.Errorf("неизвестный тип отправки: %s", sendType)
 	}
 }
 
@@ -66,30 +63,37 @@ func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricV
 	return nil
 }
 
-func (s *Sender) sendMetricsIndividually(memMetrics *Metrics) {
+func (s *Sender) sendMetricsIndividually(snapshot MetricsSnapshot) error {
+	var errs []error
+
 	metricType := models.TypeGauge
-	for metricName, val := range memMetrics.Gauges {
+	for metricName, val := range snapshot.Gauges {
 		metricValue := strconv.FormatFloat(float64(val), 'f', -1, 64)
 
-		err := s.sendMetricURL(metricType, metricName, metricValue)
-		if err != nil {
-			log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
+		if err := s.sendMetricURL(metricType, metricName, metricValue); err != nil {
+			errs = append(errs, fmt.Errorf("gauge %s %w", metricName, err))
 		}
 	}
+
 	metricType = models.TypeCounter
-	for metricName, val := range memMetrics.Counters {
+	for metricName, val := range snapshot.Counters {
 		metricValue := strconv.Itoa(int(val))
 
-		err := s.sendMetricURL(metricType, metricName, metricValue)
-		if err != nil {
-			log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
+		if err := s.sendMetricURL(metricType, metricName, metricValue); err != nil {
+			errs = append(errs, fmt.Errorf("counter %s %w", metricName, err))
 		}
 	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("send metrics individually failed: %v", errs)
+	}
+
+	return nil
 }
 
-func (s *Sender) sendMetricsBatch(memMetrics *Metrics, compress bool) {
+func (s *Sender) sendMetricsBatch(snapshot MetricsSnapshot, compress bool) error {
 	var metrics []models.Metric
-	for id, v := range memMetrics.Gauges {
+	for id, v := range snapshot.Gauges {
 		value := v
 		metric := models.Metric{
 			ID:    id,
@@ -98,7 +102,7 @@ func (s *Sender) sendMetricsBatch(memMetrics *Metrics, compress bool) {
 		}
 		metrics = append(metrics, metric)
 	}
-	for id, d := range memMetrics.Counters {
+	for id, d := range snapshot.Counters {
 		delta := d
 		metric := models.Metric{
 			ID:    id,
@@ -107,10 +111,8 @@ func (s *Sender) sendMetricsBatch(memMetrics *Metrics, compress bool) {
 		}
 		metrics = append(metrics, metric)
 	}
-	err := s.sendMetricJSON(metrics, compress)
-	if err != nil {
-		log.Printf("Ошибка отправки метрик: %v", err)
-	}
+	return s.sendMetricJSON(metrics, compress)
+
 }
 func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 	fullURL := s.prepareURL("/updates/")

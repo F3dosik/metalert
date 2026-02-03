@@ -12,10 +12,10 @@ func TestUpdateMetrics(t *testing.T) {
 		Counters: make(map[string]models.Counter),
 	}
 
-	metrics.Update()
+	metrics.UpdateRuntimeMetrics()
 	// Проверяем наличие всех метрик после обновления.
 	t.Run("Gauges", func(t *testing.T) {
-		for name := range getters {
+		for name := range gettersRuntime {
 			if _, ok := metrics.Gauges[name]; !ok {
 				t.Errorf("Отсутствует метрика: %s", name)
 			}
@@ -34,12 +34,12 @@ func TestUpdateMetrics(t *testing.T) {
 			Counters: make(map[string]models.Counter),
 		}
 
-		metrics.Update()
+		metrics.UpdateRuntimeMetrics()
 		if metrics.Counters["PollCount"] != 1 {
 			t.Errorf("PollCount = %d; хотели 1", metrics.Counters["PollCount"])
 		}
 
-		metrics.Update()
+		metrics.UpdateRuntimeMetrics()
 		if metrics.Counters["PollCount"] != 2 {
 			t.Errorf("PollCount = %d; хотели 2", metrics.Counters["PollCount"])
 		}
