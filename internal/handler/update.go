@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"time"
 
 	"net/http"
 
+	"github.com/F3dosik/metalert.git/internal/audit"
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/F3dosik/metalert.git/internal/service"
 	"github.com/F3dosik/metalert.git/pkg/models"
@@ -18,13 +21,17 @@ import (
 	"go.uber.org/zap"
 )
 
-func UpdateHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+func UpdateHandler(storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		update(w, r, storage, logger)
+		update(w, r, storage, dispatcher, logger)
 	}
 }
 
-func update(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger) {
+func update(
+	w http.ResponseWriter, r *http.Request,
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger,
+) {
 
 	var metName, metValue string
 
@@ -40,18 +47,31 @@ func update(w http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 
 	service.UpdateMetric(r.Context(), storage, metName, value)
 
+	go dispatcher.Publish(audit.AuditEvent{
+		Ts:        time.Now().Unix(),
+		Metrics:   []string{metName},
+		IPAddress: getIP(r),
+	})
+
 	message := fmt.Sprint("Метрика ", metName, " успешно обновлена\r\n")
 	RespondTextOK(w, message)
 
 }
 
-func UpdateJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
+func UpdateJSONHandler(
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, asyncSave bool,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updateJSON(w, r, storage, logger, asyncSave)
+		updateJSON(w, r, storage, dispatcher, logger, asyncSave)
 	}
 }
 
-func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
+func updateJSON(
+	w http.ResponseWriter, r *http.Request,
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, saveOnUpdate bool,
+) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric
@@ -65,6 +85,12 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.Metri
 		handleServiceError(w, logger, err)
 		return
 	}
+
+	go dispatcher.Publish(audit.AuditEvent{
+		Ts:        time.Now().Unix(),
+		Metrics:   metricNames([]models.Metric{metric}),
+		IPAddress: getIP(r),
+	})
 
 	if saveOnUpdate {
 		if s, ok := storage.(repository.Savable); ok {
@@ -82,13 +108,20 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.Metri
 
 }
 
-func UpdatesJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
+func UpdatesJSONHandler(
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, asyncSave bool,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updatesJSON(w, r, storage, logger, asyncSave)
+		updatesJSON(w, r, storage, dispatcher, logger, asyncSave)
 	}
 }
 
-func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
+func updatesJSON(
+	w http.ResponseWriter, r *http.Request,
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, saveOnUpdate bool,
+) {
 	logger.Debug("decoding request")
 
 	var metrics []models.Metric
@@ -105,6 +138,13 @@ func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.Metr
 		handleServiceError(w, logger, err)
 		return
 	}
+
+	go dispatcher.Publish(audit.AuditEvent{
+		Ts:        time.Now().Unix(),
+		Metrics:   metricNames(metrics),
+		IPAddress: getIP(r),
+	})
+
 	if saveOnUpdate {
 		if s, ok := storage.(repository.Savable); ok {
 			go func() {
@@ -117,6 +157,22 @@ func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.Metr
 	logger.Debug("sending HTTP 200 response")
 	message := fmt.Sprint("Успешно обновлено ", len(metrics), " метрик\r\n")
 	RespondTextOK(w, message)
+}
+
+func metricNames(metrics []models.Metric) []string {
+	names := make([]string, len(metrics))
+	for i, m := range metrics {
+		names[i] = m.ID
+	}
+	return names
+}
+
+func getIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
 }
 
 func updateMetrics(ctx context.Context, storage repository.MetricsStorage, metrics []models.Metric) error {

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/F3dosik/metalert.git/internal/audit"
 	cfg "github.com/F3dosik/metalert.git/internal/config/server"
 	"github.com/F3dosik/metalert.git/internal/handler"
 	"github.com/F3dosik/metalert.git/internal/middleware"
@@ -18,16 +19,14 @@ import (
 )
 
 type Server struct {
-	config  *cfg.ServerConfig
-	storage repository.MetricsStorage
-	router  chi.Router
-	logger  *zap.SugaredLogger
-	//ctx     context.Context
-	//cancel  context.CancelFunc
+	config     *cfg.ServerConfig
+	storage    repository.MetricsStorage
+	router     chi.Router
+	logger     *zap.SugaredLogger
+	dispatcher *audit.AuditDispatcher
 }
 
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
-	//ctx, cancel := context.WithCancel(context.Background())
 
 	var storage repository.MetricsStorage
 	var err error
@@ -52,15 +51,22 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 
 	}
 
+	dispatcher := audit.NewAuditDispatcher(logger)
+	if cfg.AuditFile != "" {
+		dispatcher.Register(audit.NewFileAuditObserver(cfg.AuditFile))
+	}
+	if cfg.AuditURL != "" {
+		dispatcher.Register(audit.NewURLAuditObserver(cfg.AuditURL))
+	}
+
 	r := chi.NewRouter()
 
 	server := &Server{
-		config:  cfg,
-		storage: storage,
-		router:  r,
-		logger:  logger,
-		//ctx:     ctx,
-		//cancel:  cancel,
+		config:     cfg,
+		storage:    storage,
+		router:     r,
+		logger:     logger,
+		dispatcher: dispatcher,
 	}
 	server.routes()
 
@@ -75,10 +81,10 @@ func (s *Server) routes() {
 	_, isSavable := s.storage.(repository.Savable)
 	asyncSave := isSavable && s.config.StoreInterval == 0
 	s.router.Route("/update/", func(r chi.Router) {
-		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.logger, asyncSave))
-		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage, s.logger))
+		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.dispatcher, s.logger, asyncSave))
+		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage, s.dispatcher, s.logger))
 	})
-	s.router.With(middleware.RequireJSON(s.logger)).Post("/updates/", handler.UpdatesJSONHandler(s.storage, s.logger, asyncSave))
+	s.router.With(middleware.RequireJSON(s.logger)).Post("/updates/", handler.UpdatesJSONHandler(s.storage, s.dispatcher, s.logger, asyncSave))
 	s.router.Route("/value", func(r chi.Router) {
 		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
@@ -94,6 +100,8 @@ func (s *Server) Run() {
 		"file_path", s.config.FileStoragePath,
 		"restore", s.config.Restore,
 		"DatabaseDSN", s.config.DatabaseDSN,
+		"AuditFile", s.config.AuditFile,
+		"AuditURL", s.config.AuditURL,
 	)
 
 	if _, ok := s.storage.(repository.Savable); s.config.StoreInterval > 0 && ok {
@@ -135,6 +143,8 @@ func (s *Server) Run() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
+
+	s.dispatcher.Wait()
 }
 
 func (s *Server) AutoSave() {
