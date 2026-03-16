@@ -94,7 +94,6 @@ func TestUpdate(t *testing.T) {
 
 			dispatcher := &audit.AuditDispatcher{}
 
-			// Создаем полноценный router как в server.go
 			r := chi.NewRouter()
 			r.Route("/update", func(r chi.Router) {
 				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage, dispatcher, sugarLogger))

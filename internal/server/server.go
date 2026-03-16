@@ -15,6 +15,7 @@ import (
 	"github.com/F3dosik/metalert.git/internal/middleware/gzip"
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/go-chi/chi/v5"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
@@ -90,6 +91,8 @@ func (s *Server) routes() {
 		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
 	})
 	s.router.Get("/ping", handler.PingDB(s.storage, s.logger))
+	s.router.Mount("/debug", chiMiddleware.Profiler())
+
 }
 
 func (s *Server) Run() {

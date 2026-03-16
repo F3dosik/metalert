@@ -2,8 +2,17 @@ package gzip
 
 import (
 	"compress/gzip"
+	"io"
 	"net/http"
+	"sync"
 )
+
+var writerPool = sync.Pool{
+	New: func() any {
+		w, _ := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
+		return &compressWriter{zw: w}
+	},
+}
 
 type compressWriter struct {
 	w  http.ResponseWriter
@@ -11,10 +20,10 @@ type compressWriter struct {
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
-	return &compressWriter{
-		w:  w,
-		zw: gzip.NewWriter(w),
-	}
+	cw := writerPool.Get().(*compressWriter)
+	cw.zw.Reset(w)
+	cw.w = w
+	return cw
 }
 
 func (c *compressWriter) Header() http.Header {
@@ -29,9 +38,11 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 	c.w.WriteHeader(statusCode)
 }
 
-// Close закрывает gzip.Writer и досылает все данные из буфера.
 func (c *compressWriter) Close() error {
-	return c.zw.Close()
+	err := c.zw.Close()
+	c.w = nil
+	writerPool.Put(c) // возвращаем в пул
+	return err
 }
 
 func (c *compressWriter) Flush() {
