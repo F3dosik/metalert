@@ -3,8 +3,9 @@ package handler
 import (
 	"net/http"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
 	"go.uber.org/zap"
+
+	"github.com/F3dosik/metalert.git/internal/repository"
 )
 
 var (

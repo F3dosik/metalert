@@ -5,10 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/F3dosik/metalert.git/internal/audit"
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/F3dosik/metalert.git/pkg/logger"
-	"github.com/go-chi/chi/v5"
 )
 
 func TestUpdate(t *testing.T) {

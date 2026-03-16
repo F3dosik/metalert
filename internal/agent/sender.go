@@ -9,9 +9,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-resty/resty/v2"
+
 	"github.com/F3dosik/metalert.git/pkg/compression"
 	"github.com/F3dosik/metalert.git/pkg/models"
-	"github.com/go-resty/resty/v2"
 )
 
 type Sender struct {

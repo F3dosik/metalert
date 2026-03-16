@@ -8,15 +8,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
+
 	"github.com/F3dosik/metalert.git/internal/audit"
 	cfg "github.com/F3dosik/metalert.git/internal/config/server"
 	"github.com/F3dosik/metalert.git/internal/handler"
 	"github.com/F3dosik/metalert.git/internal/middleware"
 	"github.com/F3dosik/metalert.git/internal/middleware/gzip"
 	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/go-chi/chi/v5"
-	chiMiddleware "github.com/go-chi/chi/v5/middleware"
-	"go.uber.org/zap"
 )
 
 type Server struct {

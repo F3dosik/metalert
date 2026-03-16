@@ -5,11 +5,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+
 	"github.com/F3dosik/metalert.git/internal/repository"
 	"github.com/F3dosik/metalert.git/internal/service"
 	"github.com/F3dosik/metalert.git/pkg/models"
-	"github.com/go-chi/chi/v5"
-	"go.uber.org/zap"
 )
 
 func ValueHandler(storage repository.MetricsStorage) http.HandlerFunc {
