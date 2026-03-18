@@ -1,3 +1,13 @@
+// Package agent реализует агент сбора и отправки метрик на сервер.
+//
+// Агент периодически собирает runtime-метрики процесса ([Metrics.Update])
+// и отправляет их на сервер ([Sender.SendMetrics]) по двум интервалам:
+//   - pollInterval — частота сбора метрик
+//   - reportInterval — частота отправки на сервер
+//
+// Поддерживаются два режима отправки:
+//   - "URL" — каждая метрика отправляется отдельным POST-запросом
+//   - "JSON" — все метрики отправляются одним пакетным запросом (опционально со сжатием gzip)
 package agent
 
 import (
@@ -7,13 +17,24 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
+// Run запускает агент сбора и отправки метрик.
+//
+// Сразу после старта выполняет первый сбор и отправку метрик,
+// затем запускает два независимых тикера:
+//   - каждые pollInterval собирает текущие метрики runtime
+//   - каждые reportInterval отправляет накопленные метрики на сервер
+//
+// Блокирует выполнение горутины навсегда (рассчитан на запуск в main).
+//
+// Пример:
+//
+//	agent.Run("http://localhost:8080", 10*time.Second, 2*time.Second)
 func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
 	}
 
-	// log.Printf("Агент запущен\nСервер: %s\nКонфигурация: {reportInterval: %v, pollInterval: %v}", endpoint, reportInterval, pollInterval)
 	log.Printf("┌────────────────────────────────────────┐")
 	log.Printf("│ Агент запущен                          │")
 	log.Printf("│ Сервер: %-30s │", endpoint)
@@ -25,7 +46,6 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 	sender := NewSender(endpoint)
 
 	metrics.Update()
-
 	sender.SendMetrics(metrics, "JSON", true)
 
 	tickerPoll := time.NewTicker(pollInterval)
