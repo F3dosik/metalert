@@ -37,7 +37,6 @@ func makeBatch(b *testing.B, n int) []models.Metric {
 
 func BenchmarkValidateMetric_Gauge(b *testing.B) {
 	m := gaugeMetric(b, "Alloc", 123.45)
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -47,7 +46,6 @@ func BenchmarkValidateMetric_Gauge(b *testing.B) {
 
 func BenchmarkValidateMetric_Counter(b *testing.B) {
 	m := counterMetric(b, "Requests", 42)
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -57,7 +55,6 @@ func BenchmarkValidateMetric_Counter(b *testing.B) {
 
 func BenchmarkValidateMetric_InvalidType(b *testing.B) {
 	m := models.Metric{ID: "X", MType: "unknown"}
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -71,7 +68,6 @@ func BenchmarkUpdateMetrics_Single(b *testing.B) {
 	s := repository.NewMemMetricsStorage()
 	ctx := context.Background()
 	metrics := makeBatch(b, 1)
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -83,7 +79,6 @@ func BenchmarkUpdateMetrics_Batch10(b *testing.B) {
 	s := repository.NewMemMetricsStorage()
 	ctx := context.Background()
 	metrics := makeBatch(b, 10)
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -95,7 +90,6 @@ func BenchmarkUpdateMetrics_Batch100(b *testing.B) {
 	s := repository.NewMemMetricsStorage()
 	ctx := context.Background()
 	metrics := makeBatch(b, 100)
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {

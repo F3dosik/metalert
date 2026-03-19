@@ -15,7 +15,6 @@ func (d *discardResponseWriter) WriteHeader(statusCode int)  {}
 func BenchmarkCompressWriter_WithPool(b *testing.B) {
 	body := []byte(`{"id":"Alloc","type":"gauge","value":123.45}`)
 	w := &discardResponseWriter{}
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
