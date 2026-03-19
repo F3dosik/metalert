@@ -8,12 +8,23 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
+// Metrics хранит текущий снимок метрик агента.
+//
+// Поле mu защищает Gauges и Counters от гонки данных:
+// [Metrics.Update] захватывает полный Lock, [Sender.SendMetrics] — RLock.
 type Metrics struct {
-	Gauges   map[string]models.Gauge
+	// Gauges содержит gauge-метрики: значения runtime.MemStats и RandomValue.
+	Gauges map[string]models.Gauge
+
+	// Counters содержит counter-метрики. На данный момент единственная
+	// метрика — PollCount, инкрементируемая при каждом вызове Update.
 	Counters map[string]models.Counter
-	mu       sync.RWMutex
+
+	mu sync.RWMutex
 }
 
+// getters — таблица функций-извлекателей gauge-метрик из runtime.MemStats.
+// Каждый ключ соответствует имени метрики, отправляемой на сервер.
 var getters = map[string]func(*runtime.MemStats) models.Gauge{
 	"Alloc":         func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.Alloc) },
 	"BuckHashSys":   func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.BuckHashSys) },
@@ -44,6 +55,13 @@ var getters = map[string]func(*runtime.MemStats) models.Gauge{
 	"TotalAlloc":    func(m *runtime.MemStats) models.Gauge { return models.Gauge(m.TotalAlloc) },
 }
 
+// Update собирает текущий снимок runtime.MemStats и обновляет все gauge-метрики.
+//
+// Дополнительно устанавливает:
+//   - RandomValue — случайное число в диапазоне [0, 100)
+//   - PollCount — счётчик, инкрементируемый при каждом вызове
+//
+// Потокобезопасен: захватывает полный mutex на время записи.
 func (m *Metrics) Update() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
@@ -51,13 +69,10 @@ func (m *Metrics) Update() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Обновление метрик runtime
 	for name, getter := range getters {
 		m.Gauges[name] = getter(&memStats)
 	}
 
-	randomValue := rand.Float64() * 100
-	m.Gauges["RandomValue"] = models.Gauge(randomValue)
-
+	m.Gauges["RandomValue"] = models.Gauge(rand.Float64() * 100)
 	m.Counters["PollCount"]++
 }

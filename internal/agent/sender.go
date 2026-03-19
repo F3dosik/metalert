@@ -15,11 +15,21 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
+// Sender отвечает за отправку метрик на сервер.
+//
+// Поддерживает два режима через [Sender.SendMetrics]:
+//   - "URL" — каждая метрика отдельным POST /update/{type}/{name}/{value}
+//   - "JSON" — все метрики одним POST /updates/ (опционально gzip)
 type Sender struct {
+	// ServerURL — базовый адрес сервера метрик, например "http://localhost:8080".
 	ServerURL string
-	Client    *resty.Client
+
+	// Client — HTTP-клиент resty с настроенным таймаутом.
+	Client *resty.Client
 }
 
+// NewSender создаёт Sender, настроенный на отправку метрик по адресу serverURL.
+// Таймаут HTTP-запросов — 5 секунд.
 func NewSender(serverURL string) *Sender {
 	client := resty.New()
 	client.SetTimeout(5 * time.Second)
@@ -29,6 +39,13 @@ func NewSender(serverURL string) *Sender {
 	}
 }
 
+// SendMetrics отправляет все метрики из memMetrics на сервер.
+//
+// Параметры:
+//   - sendType: "URL" — поштучная отправка, "JSON" — пакетная
+//   - compress: при sendType="JSON" сжимает тело запроса через gzip
+//
+// Захватывает RLock на время отправки, не блокируя параллельный сбор метрик.
 func (s *Sender) SendMetrics(memMetrics *Metrics, sendType string, compress bool) {
 	memMetrics.mu.RLock()
 	defer memMetrics.mu.RUnlock()
@@ -43,6 +60,8 @@ func (s *Sender) SendMetrics(memMetrics *Metrics, sendType string, compress bool
 	}
 }
 
+// sendMetricURL отправляет одну метрику через URL-параметры.
+// Маршрут: POST /update/{metType}/{metName}/{metValue}
 func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricValue string) error {
 	fullURL := s.prepareURL("/update/{metType}/{metName}/{metValue}")
 
@@ -67,52 +86,52 @@ func (s *Sender) sendMetricURL(metricType models.MetricType, metricName, metricV
 	return nil
 }
 
+// sendMetricsIndividually отправляет каждую метрику отдельным HTTP-запросом.
+// Используется при sendType="URL".
 func (s *Sender) sendMetricsIndividually(memMetrics *Metrics) {
-	metricType := models.TypeGauge
 	for metricName, val := range memMetrics.Gauges {
 		metricValue := strconv.FormatFloat(float64(val), 'f', -1, 64)
-
-		err := s.sendMetricURL(metricType, metricName, metricValue)
-		if err != nil {
+		if err := s.sendMetricURL(models.TypeGauge, metricName, metricValue); err != nil {
 			log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
 		}
 	}
-	metricType = models.TypeCounter
 	for metricName, val := range memMetrics.Counters {
 		metricValue := strconv.Itoa(int(val))
-
-		err := s.sendMetricURL(metricType, metricName, metricValue)
-		if err != nil {
+		if err := s.sendMetricURL(models.TypeCounter, metricName, metricValue); err != nil {
 			log.Printf("Ошибка отправки метрики %s: %v", metricName, err)
 		}
 	}
 }
 
+// sendMetricsBatch собирает все метрики в срез и отправляет одним JSON-запросом.
+// Используется при sendType="JSON".
 func (s *Sender) sendMetricsBatch(memMetrics *Metrics, compress bool) {
 	var metrics []models.Metric
 	for id, v := range memMetrics.Gauges {
 		value := v
-		metric := models.Metric{
+		metrics = append(metrics, models.Metric{
 			ID:    id,
 			MType: models.TypeGauge,
 			Value: &value,
-		}
-		metrics = append(metrics, metric)
+		})
 	}
 	for id, d := range memMetrics.Counters {
 		delta := d
-		metric := models.Metric{
+		metrics = append(metrics, models.Metric{
 			ID:    id,
 			MType: models.TypeCounter,
 			Delta: &delta,
-		}
-		metrics = append(metrics, metric)
+		})
 	}
-	err := s.sendMetricJSON(metrics, compress)
-	if err != nil {
+	if err := s.sendMetricJSON(metrics, compress); err != nil {
 		log.Printf("Ошибка отправки метрик: %v", err)
 	}
 }
+
+// sendMetricJSON отправляет срез метрик одним POST-запросом на /updates/.
+//
+// При compress=true сжимает JSON-тело через gzip и устанавливает
+// заголовок Content-Encoding: gzip.
 func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 	fullURL := s.prepareURL("/updates/")
 
@@ -152,6 +171,8 @@ func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 	return nil
 }
 
+// prepareURL формирует полный URL из базового адреса сервера и пути.
+// Если схема не указана, автоматически добавляет "http://".
 func (s *Sender) prepareURL(path string) string {
 	fullURL, err := url.JoinPath(s.ServerURL, path)
 	if err != nil {

@@ -1,6 +1,5 @@
-// Package service реализует бизнес-логику сервера метрик.
-// Здесь функции проверки и преобразования значений метрик,
-// а также взаимодействие между хранилищем и API.
+// Package service содержит бизнес-логику обработки метрик:
+// валидацию входных данных и обновление значений в хранилище.
 package service
 
 import (
@@ -10,27 +9,31 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
+// CheckAndParseValue валидирует тип и имя метрики, затем парсит строковое значение
+// в соответствующий Go-тип: [models.Gauge] или [models.Counter].
+//
+// Используется хендлером [handler.UpdateHandler] для обработки URL-параметров.
+//
+// Возвращаемые ошибки:
+//   - [models.ErrInvalidType] — неизвестный тип метрики
+//   - [models.ErrNoName] — пустое имя метрики
+//   - [models.ErrInvalidValue] — значение не является числом с плавающей точкой (для gauge)
+//   - [models.ErrInvalidDelta] — значение не является целым числом (для counter)
 func CheckAndParseValue(metType models.MetricType, metName, metValue string) (any, error) {
-	// log.Printf("CheckAndParseValue: type=%s, name=%s, value=%s", metType, metName, metValue)
-
 	if err := ValidateMetricType(metType); err != nil {
-		// log.Printf("ValidateMetricType failed: %v", err)
 		return nil, err
 	}
 
 	if err := validateMetricName(metName); err != nil {
-		// log.Printf("validateMetricName failed: %v", err)
 		return nil, err
 	}
 
 	switch metType {
 	case models.TypeGauge:
 		value, err := parseGaugeValue(metValue)
-		// log.Printf("parseGaugeValue result: %v, error: %v", value, err)
 		return value, err
 	case models.TypeCounter:
 		value, err := parseCounterValue(metValue)
-		// log.Printf("parseCounterValue result: %v, error: %v", value, err)
 		return value, err
 	default:
 		log.Printf("Unknown metric type: %s", metType)
@@ -38,6 +41,8 @@ func CheckAndParseValue(metType models.MetricType, metName, metValue string) (an
 	}
 }
 
+// ValidateMetricType проверяет, что metType входит в множество допустимых типов.
+// Возвращает [models.ErrInvalidType], если тип не поддерживается.
 func ValidateMetricType(metType models.MetricType) error {
 	log.Printf("ValidateMetricType: %s", metType)
 	if !models.IsValidMetricType(metType) {
@@ -46,16 +51,18 @@ func ValidateMetricType(metType models.MetricType) error {
 	return nil
 }
 
+// validateMetricName проверяет, что имя метрики не пустое.
+// Возвращает [models.ErrNoName], если metName == "".
 func validateMetricName(metName string) error {
-	// log.Printf("validateMetricName: %s", metName)
 	if metName == "" {
 		return models.ErrNoName
 	}
 	return nil
 }
 
+// parseGaugeValue разбирает строку metValue как число с плавающей точкой (float64).
+// Возвращает [models.ErrInvalidValue] при ошибке разбора.
 func parseGaugeValue(metValue string) (models.Gauge, error) {
-	// log.Printf("parseCounterValue: %s", metValue)
 	f, err := strconv.ParseFloat(metValue, 64)
 	if err != nil {
 		return 0, models.ErrInvalidValue
@@ -63,8 +70,9 @@ func parseGaugeValue(metValue string) (models.Gauge, error) {
 	return models.Gauge(f), nil
 }
 
+// parseCounterValue разбирает строку metValue как целое знаковое число (int64).
+// Возвращает [models.ErrInvalidDelta] при ошибке разбора.
 func parseCounterValue(metValue string) (models.Counter, error) {
-	// log.Printf("parseGaugeValue: %s", metValue)
 	i, err := strconv.ParseInt(metValue, 10, 64)
 	if err != nil {
 		return 0, models.ErrInvalidDelta

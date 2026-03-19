@@ -15,7 +15,8 @@ func TestFileAuditObserver_Notify_Success(t *testing.T) {
 	require.NoError(t, err)
 	f.Close()
 
-	observer := NewFileAuditObserver(f.Name())
+	observer, _ := NewFileAuditObserver(f.Name())
+	defer observer.Close()
 	event := AuditEvent{
 		Ts:        12345678,
 		Metrics:   []string{"Alloc", "Frees"},
@@ -39,7 +40,8 @@ func TestFileAuditObserver_Notify_Append(t *testing.T) {
 	require.NoError(t, err)
 	f.Close()
 
-	observer := NewFileAuditObserver(f.Name())
+	observer, _ := NewFileAuditObserver(f.Name())
+	defer observer.Close()
 	events := []AuditEvent{
 		{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "10.0.0.1"},
 		{Ts: 2, Metrics: []string{"Frees"}, IPAddress: "10.0.0.2"},
@@ -67,9 +69,7 @@ func TestFileAuditObserver_Notify_Append(t *testing.T) {
 }
 
 func TestFileAuditObserver_Notify_InvalidPath(t *testing.T) {
-	observer := NewFileAuditObserver("/nonexistent/path/audit.log")
-	err := observer.Notify(AuditEvent{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "127.0.0.1"})
-
+	_, err := NewFileAuditObserver("/nonexistent/path/audit.log")
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "open file")
+	assert.ErrorContains(t, err, "open audit file")
 }

@@ -13,6 +13,17 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
+// ValueHandler возвращает HTTP-хендлер для получения значения метрики через URL-параметры.
+//
+// Маршрут: GET /value/{metType}/{metName}
+//
+// Параметры пути:
+//   - metType — тип метрики ("gauge" или "counter")
+//   - metName — имя метрики
+//
+// При успехе возвращает 200 OK с текстовым значением метрики.
+// При неизвестном типе — 400 Bad Request.
+// При отсутствии метрики — 404 Not Found.
 func ValueHandler(storage repository.MetricsStorage) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		value(rw, r, storage)
@@ -52,6 +63,21 @@ func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 	RespondTextOK(rw, message)
 }
 
+// ValueJSONHandler возвращает HTTP-хендлер для получения значения метрики через JSON.
+//
+// Маршрут: POST /value/
+//
+// Тело запроса — JSON-объект с полями id и type:
+//
+//	{"id": "cpu", "type": "gauge"}
+//	{"id": "requests", "type": "counter"}
+//
+// Возвращает тот же объект с заполненным полем Value (для gauge) или Delta (для counter):
+//
+//	{"id": "cpu", "type": "gauge", "value": 72.5}
+//
+// При невалидных данных — 400 Bad Request.
+// При отсутствии метрики — 404 Not Found.
 func ValueJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		valueJSON(w, r, storage, logger)
@@ -85,7 +111,6 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.Metric
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-
 		message.Value = &val
 
 	case models.TypeCounter:
@@ -95,7 +120,6 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.Metric
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-
 		message.Delta = &val
 	}
 

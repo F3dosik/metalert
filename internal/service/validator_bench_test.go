@@ -8,19 +8,19 @@ import (
 )
 
 func BenchmarkCheckAndParseValue_Gauge(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		service.CheckAndParseValue(models.TypeGauge, "Alloc", "123.45")
 	}
 }
 
 func BenchmarkCheckAndParseValue_Counter(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		service.CheckAndParseValue(models.TypeCounter, "Requests", "42")
 	}
 }
 
 func BenchmarkCheckAndParseValue_InvalidType(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		service.CheckAndParseValue("unknown", "Alloc", "123.45")
 	}
 }

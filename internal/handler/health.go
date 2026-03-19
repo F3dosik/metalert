@@ -12,6 +12,16 @@ var (
 	errPingFailed = "Database connection failed"
 )
 
+// PingDB возвращает HTTP-хендлер для проверки соединения с базой данных.
+//
+// Маршрут: GET /ping
+//
+// Хендлер проверяет, что текущее хранилище является DBMetricsStorage
+// и успешно отвечает на Ping.
+//
+// Возможные ответы:
+//   - 200 OK — соединение с БД установлено
+//   - 500 Internal Server Error — БД не инициализирована или недоступна
 func PingDB(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		dbStorage, ok := storage.(*repository.DBMetricsStorage)

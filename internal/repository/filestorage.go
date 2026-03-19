@@ -10,12 +10,30 @@ import (
 	"github.com/F3dosik/metalert.git/pkg/models"
 )
 
+// FileMetricsStorage — персистентное хранилище метрик на основе [MemMetricsStorage].
+//
+// Все операции чтения и записи делегируются встроенному MemMetricsStorage.
+// Метод [FileMetricsStorage.Save] атомарно сбрасывает текущее состояние на диск
+// через временный файл с последующим переименованием, что защищает от частичной записи.
+//
+// Пример создания с восстановлением данных из файла:
+//
+//	storage, err := repository.NewFileMetricsStorage("/var/lib/metalert/metrics.json", true)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer storage.Close(ctx)
 type FileMetricsStorage struct {
 	*MemMetricsStorage
 	fileName string
 	tmpFile  *os.File
 }
 
+// NewFileMetricsStorage создаёт FileMetricsStorage, связанное с файлом fileName.
+//
+// Если restore=true, при старте загружает ранее сохранённые метрики из файла.
+// Автоматически создаёт все необходимые директории.
+// Для освобождения ресурсов необходимо вызвать [FileMetricsStorage.Close].
 func NewFileMetricsStorage(fileName string, restore bool) (*FileMetricsStorage, error) {
 	memStore := NewMemMetricsStorage()
 
@@ -47,6 +65,11 @@ func NewFileMetricsStorage(fileName string, restore bool) (*FileMetricsStorage, 
 	return fs, nil
 }
 
+// Save сохраняет все текущие метрики в файл атомарно:
+// сначала записывает во временный файл, затем переименовывает в целевой.
+//
+// Реализует интерфейс [Savable], что позволяет хендлерам вызывать Save
+// асинхронно после каждого обновления метрики.
 func (f *FileMetricsStorage) Save(ctx context.Context) error {
 	metrics, _ := f.GetAllMetrics(ctx)
 
@@ -69,6 +92,8 @@ func (f *FileMetricsStorage) Save(ctx context.Context) error {
 	return nil
 }
 
+// load восстанавливает метрики из файла fileName в память.
+// Вызывается автоматически из NewFileMetricsStorage при restore=true.
 func (f *FileMetricsStorage) load(ctx context.Context) error {
 	data, err := os.ReadFile(f.fileName)
 	if err != nil {
@@ -92,6 +117,10 @@ func (f *FileMetricsStorage) load(ctx context.Context) error {
 	return nil
 }
 
+// Close сохраняет метрики, синхронизирует и закрывает временный файл,
+// после чего атомарно переименовывает его в целевой fileName.
+//
+// Следует вызывать при завершении работы сервера (например, через defer).
 func (f *FileMetricsStorage) Close(ctx context.Context) error {
 	if err := f.Save(ctx); err != nil {
 		return fmt.Errorf("save before close: %w", err)

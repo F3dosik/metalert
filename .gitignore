@@ -26,3 +26,6 @@ vendor/
 
 # vars
 var
+
+# mocks
+mocks/
