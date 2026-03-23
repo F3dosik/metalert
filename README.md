@@ -70,17 +70,17 @@ git fetch template && git checkout template/v2 .github
          0     0% 925.35%  1026.25kB 23.48%  compress/gzip.(*Writer).Close
          0     0% 925.35% 38895.34kB 890.06%  compress/gzip.(*Writer).Write
          0     0% 925.35% 38895.34kB 890.06%  fmt.Fprint
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/handler.RespondText
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/handler.RespondTextOK (inline)
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/handler.updateJSON
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/middleware.(*loggingResponseWriter).Write
-         0     0% 925.35%  1026.25kB 23.48%  github.com/F3dosik/metalert.git/internal/middleware/gzip.(*compressWriter).Close
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/middleware/gzip.(*compressWriter).Write
-         0     0% 925.35% 39921.59kB 913.54%  github.com/F3dosik/metalert.git/internal/server.(*Server).routes.WithCompression.func3.1
-         0     0% 925.35%  1026.25kB 23.48%  github.com/F3dosik/metalert.git/internal/server.(*Server).routes.WithCompression.func3.1.1
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/server.(*Server).routes.WithLogging.func4.1
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/server.(*Server).routes.func1.RequireJSON.1.1
-         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert.git/internal/server.(*Server).routes.func1.UpdateJSONHandler.2
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/handler.RespondText
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/handler.RespondTextOK (inline)
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/handler.updateJSON
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/middleware.(*loggingResponseWriter).Write
+         0     0% 925.35%  1026.25kB 23.48%  github.com/F3dosik/metalert/internal/middleware/gzip.(*compressWriter).Close
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/middleware/gzip.(*compressWriter).Write
+         0     0% 925.35% 39921.59kB 913.54%  github.com/F3dosik/metalert/internal/server.(*Server).routes.WithCompression.func3.1
+         0     0% 925.35%  1026.25kB 23.48%  github.com/F3dosik/metalert/internal/server.(*Server).routes.WithCompression.func3.1.1
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/server.(*Server).routes.WithLogging.func4.1
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/server.(*Server).routes.func1.RequireJSON.1.1
+         0     0% 925.35% 38895.34kB 890.06%  github.com/F3dosik/metalert/internal/server.(*Server).routes.func1.UpdateJSONHandler.2
          0     0% 925.35% 38895.34kB 890.06%  github.com/go-chi/chi/v5.(*ChainHandler).ServeHTTP
          0     0% 925.35% 38895.34kB 890.06%  github.com/go-chi/chi/v5.(*Mux).Mount.func1
          0     0% 925.35% 39921.59kB 913.54%  github.com/go-chi/chi/v5.(*Mux).ServeHTTP

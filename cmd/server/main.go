@@ -3,9 +3,9 @@ package main
 import (
 	"log"
 
-	cfg "github.com/F3dosik/metalert.git/internal/config/server"
-	"github.com/F3dosik/metalert.git/internal/server"
-	"github.com/F3dosik/metalert.git/pkg/logger"
+	cfg "github.com/F3dosik/metalert/internal/config/server"
+	"github.com/F3dosik/metalert/internal/server"
+	"github.com/F3dosik/metalert/pkg/logger"
 )
 
 func main() {

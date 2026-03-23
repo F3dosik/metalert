@@ -22,12 +22,12 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert.git/internal/audit"
-	cfg "github.com/F3dosik/metalert.git/internal/config/server"
-	"github.com/F3dosik/metalert.git/internal/handler"
-	"github.com/F3dosik/metalert.git/internal/middleware"
-	"github.com/F3dosik/metalert.git/internal/middleware/gzip"
-	"github.com/F3dosik/metalert.git/internal/repository"
+	"github.com/F3dosik/metalert/internal/audit"
+	cfg "github.com/F3dosik/metalert/internal/config/server"
+	"github.com/F3dosik/metalert/internal/handler"
+	"github.com/F3dosik/metalert/internal/middleware"
+	"github.com/F3dosik/metalert/internal/middleware/gzip"
+	"github.com/F3dosik/metalert/internal/repository"
 )
 
 // Server — HTTP-сервер сбора и хранения метрик.

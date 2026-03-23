@@ -8,9 +8,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/internal/service"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // ValueHandler возвращает HTTP-хендлер для получения значения метрики через URL-параметры.

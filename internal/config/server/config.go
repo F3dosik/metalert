@@ -10,7 +10,7 @@ import (
 
 	"github.com/caarlos0/env/v6"
 
-	"github.com/F3dosik/metalert.git/pkg/logger"
+	"github.com/F3dosik/metalert/pkg/logger"
 )
 
 type ServerConfig struct {

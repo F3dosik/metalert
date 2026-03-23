@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // FileMetricsStorage — персистентное хранилище метрик на основе [MemMetricsStorage].

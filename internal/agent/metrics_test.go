@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 func TestUpdateMetrics(t *testing.T) {

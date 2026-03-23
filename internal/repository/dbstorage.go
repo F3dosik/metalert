@@ -12,8 +12,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/F3dosik/metalert.git/internal/pgerrors"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/internal/pgerrors"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // runMigrations применяет SQL-миграции из директории migrations/ к базе данных по dsn.

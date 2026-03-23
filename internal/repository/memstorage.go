@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // MemMetricsStorage — потокобезопасное in-memory хранилище метрик.

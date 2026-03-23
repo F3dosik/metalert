@@ -3,8 +3,8 @@ package service_test
 import (
 	"testing"
 
-	"github.com/F3dosik/metalert.git/internal/service"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/internal/service"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 func BenchmarkCheckAndParseValue_Gauge(b *testing.B) {

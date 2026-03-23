@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // Metrics хранит текущий снимок метрик агента.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 func gaugeMetric(b *testing.B, name string, v float64) models.Metric {

@@ -4,9 +4,9 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/internal/templates"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/templates"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 func MainHandler(storage repository.MetricsStorage) http.HandlerFunc {

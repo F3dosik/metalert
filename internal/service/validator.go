@@ -6,7 +6,7 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // CheckAndParseValue валидирует тип и имя метрики, затем парсит строковое значение

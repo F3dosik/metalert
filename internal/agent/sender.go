@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
-	"github.com/F3dosik/metalert.git/pkg/compression"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/compression"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // Sender отвечает за отправку метрик на сервер.

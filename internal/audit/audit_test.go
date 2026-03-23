@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/F3dosik/metalert.git/internal/audit"
+	"github.com/F3dosik/metalert/internal/audit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 
-	mocks "github.com/F3dosik/metalert.git/internal/audit/mocks"
+	mocks "github.com/F3dosik/metalert/internal/audit/mocks"
 )
 
 func newTestDispatcher() *audit.AuditDispatcher {

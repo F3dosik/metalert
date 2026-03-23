@@ -11,7 +11,7 @@ package repository
 import (
 	"context"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // MetricsStorage — основной интерфейс хранилища метрик.

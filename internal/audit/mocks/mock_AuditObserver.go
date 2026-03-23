@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	audit "github.com/F3dosik/metalert.git/internal/audit"
+	audit "github.com/F3dosik/metalert/internal/audit"
 	mock "github.com/stretchr/testify/mock"
 )
 

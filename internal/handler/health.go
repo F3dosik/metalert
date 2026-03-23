@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
+	"github.com/F3dosik/metalert/internal/repository"
 )
 
 var (

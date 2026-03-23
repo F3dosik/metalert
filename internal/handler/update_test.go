@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/F3dosik/metalert.git/internal/audit"
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/pkg/logger"
+	"github.com/F3dosik/metalert/internal/audit"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/pkg/logger"
 )
 
 func TestUpdate(t *testing.T) {

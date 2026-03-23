@@ -14,7 +14,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // Run запускает агент сбора и отправки метрик.

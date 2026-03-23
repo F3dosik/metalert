@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/F3dosik/metalert.git/internal/agent"
-	cfg "github.com/F3dosik/metalert.git/internal/config/agent"
+	"github.com/F3dosik/metalert/internal/agent"
+	cfg "github.com/F3dosik/metalert/internal/config/agent"
 )
 
 func main() {

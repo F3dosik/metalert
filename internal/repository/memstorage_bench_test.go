@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/pkg/models"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
 func BenchmarkMemStorage_SetGauge(b *testing.B) {
