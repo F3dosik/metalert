@@ -13,6 +13,7 @@ import (
 	"github.com/F3dosik/metalert/pkg/logger"
 )
 
+// generate:reset
 type ServerConfig struct {
 	Addr          string `env:"ADDRESS"`
 	LogMode       string `env:"LOG_MODE"`
