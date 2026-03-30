@@ -76,7 +76,7 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 
 	dispatcher := audit.NewAuditDispatcher(logger)
 	if cfg.AuditFile != "" {
-		observer, err := audit.NewFileAuditObserver("/var/log/metrics-audit.jsonl")
+		observer, err := audit.NewFileAuditObserver(cfg.AuditFile)
 		if err != nil {
 			logger.Fatalw("failed to create file observer", "error", err)
 		}

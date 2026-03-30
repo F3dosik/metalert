@@ -109,7 +109,7 @@ func insideMainFunc(stack []ast.Node) bool {
 	return false
 }
 
-// isgeneratedFile возвращает false, если файл был сгенерирован
+// isGeneratedFile возвращает true, если файл был сгенерирован
 func isGeneratedFile(f *ast.File) bool {
 	for _, cg := range f.Comments {
 		for _, c := range cg.List {

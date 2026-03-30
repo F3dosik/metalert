@@ -6,7 +6,7 @@ import (
 )
 
 func badFunc() {
-	panic("oops") // want `спользование panic запрещено`
+	panic("oops") // want `использование panic запрещено`
 
 	log.Fatal("fatal") // want `вызов log\.Fatal запрещён вне функции main пакета main`
 

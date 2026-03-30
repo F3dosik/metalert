@@ -109,7 +109,6 @@ git fetch template && git checkout template/v2 .github
          0     0% 925.35%   513.50kB 11.75%  runtime.main
          0     0% 925.35%  -512.25kB 11.72%  runtime.newobject
          0     0% 925.35%   516.01kB 11.81%  sync.(*Pool).Get
-fedos@BigFriend:~/Programming/Yandex/metalert/profiles$ 
          0     0% 925.35%   516.01kB 11.81%  net/http.(*chunkWriter).writeHeader
          0     0% 925.35%      513kB 11.74%  net/http.(*conn).readRequest
          0     0% 925.35% 40436.60kB 925.33%  net/http.(*conn).serve
