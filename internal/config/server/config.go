@@ -25,6 +25,8 @@ type ServerConfig struct {
 
 	AuditFile string `env:"AUDIT_FILE"`
 	AuditURL  string `env:"AUDIT_URL"`
+
+	CryptoKey string `env:"CRYPTO_KEY"`
 }
 
 var (
@@ -93,6 +95,7 @@ type flagConfig struct {
 	DatabaseDSN     string
 	AuditFile       string
 	AuditURL        string
+	CryptoKey       string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -106,6 +109,7 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.DatabaseDSN, "d", "", "PostgreSQL DSN")
 	flag.StringVar(&config.AuditFile, "audit-file", "", "the path to the file where the audit logs are saved. If the parameter is not passed, the audit should be disabled")
 	flag.StringVar(&config.AuditURL, "audit-url", "", "the full URL where the audit logs are sent. If the parameter is not passed, the audit should be disabled")
+	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
 	flag.Parse()
 
 	return &config
@@ -122,6 +126,7 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig
 	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
 	config.AuditFile = resolveString(envConfig.AuditFile, flagConfig.AuditFile, defaultAuditFile)
 	config.AuditURL = resolveString(envConfig.AuditURL, flagConfig.AuditURL, defaultAuditURL)
+	config.CryptoKey = resolveString(envConfig.CryptoKey, flagConfig.CryptoKey, "")
 
 	return config
 }

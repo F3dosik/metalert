@@ -14,6 +14,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/F3dosik/metalert/internal/crypto"
 	"github.com/F3dosik/metalert/pkg/models"
 )
 
@@ -29,7 +30,7 @@ import (
 // Пример:
 //
 //	agent.Run("http://localhost:8080", 10*time.Second, 2*time.Second)
-func Run(endpoint string, reportInterval, pollInterval time.Duration) {
+func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey string) {
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
@@ -43,7 +44,12 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 	log.Printf("│    • ReportInterval: %-17v │", reportInterval)
 	log.Printf("└────────────────────────────────────────┘")
 
-	sender := NewSender(endpoint)
+	publicKey, err := crypto.LoadPublicKey(cryptoKey)
+	if err != nil {
+		log.Printf(err.Error())
+	}
+
+	sender := NewSender(endpoint, publicKey)
 
 	metrics.Update()
 	sender.SendMetrics(metrics, "JSON", true)

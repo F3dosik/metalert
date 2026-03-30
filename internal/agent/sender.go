@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
+	"github.com/F3dosik/metalert/internal/crypto"
 	"github.com/F3dosik/metalert/pkg/compression"
 	"github.com/F3dosik/metalert/pkg/models"
 )
@@ -26,16 +28,21 @@ type Sender struct {
 
 	// Client — HTTP-клиент resty с настроенным таймаутом.
 	Client *resty.Client
+
+	// CryptoKey -публичный ключ для поддержки асимметричного шифрования.
+	CryptoKey *rsa.PublicKey
 }
 
 // NewSender создаёт Sender, настроенный на отправку метрик по адресу serverURL.
 // Таймаут HTTP-запросов — 5 секунд.
-func NewSender(serverURL string) *Sender {
+func NewSender(serverURL string, publicKey *rsa.PublicKey) *Sender {
 	client := resty.New()
 	client.SetTimeout(5 * time.Second)
+
 	return &Sender{
 		ServerURL: serverURL,
 		Client:    client,
+		CryptoKey: publicKey,
 	}
 }
 
@@ -146,9 +153,18 @@ func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 		}
 	}
 
-	req := s.Client.R().
-		SetHeader("Content-Type", "application/json").
-		SetBody(jsonData)
+	body, encrypted, err := s.encryptIfNeeded(jsonData)
+	if err != nil {
+		return fmt.Errorf("ошибка шифрования: %w", err)
+	}
+
+	req := s.Client.R().SetBody(body)
+	if encrypted {
+		req.SetHeader("X-Encrypted", "true")
+		req.SetHeader("Content-Type", "application/octet-stream")
+	} else {
+		req.SetHeader("Content-Type", "application/json")
+	}
 
 	if compress {
 		req.SetHeader("Content-Encoding", "gzip")
@@ -189,4 +205,15 @@ func (s *Sender) prepareURL(path string) string {
 		fullURL = parsed.String()
 	}
 	return fullURL
+}
+
+func (s *Sender) encryptIfNeeded(data []byte) ([]byte, bool, error) {
+	if s.CryptoKey == nil {
+		return data, false, nil
+	}
+	encrypted, err := crypto.Encrypt(data, s.CryptoKey)
+	if err != nil {
+		return nil, false, err
+	}
+	return encrypted, true, nil
 }

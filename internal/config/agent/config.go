@@ -15,6 +15,7 @@ type AgentConfig struct {
 	Endpoint       string        `env:"ADDRESS"`
 	ReportInterval time.Duration `env:"REPORT_INTERVAL"`
 	PollInterval   time.Duration `env:"POLL_INTERVAL"`
+	CryptoKey      string        `env:"CRYPTO_KEY"`
 }
 
 var (
@@ -78,6 +79,7 @@ type flagConfig struct {
 	Endpoint       string
 	ReportInterval int
 	PollInterval   int
+	CryptoKey      string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -86,6 +88,7 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.Endpoint, "a", defaultEndpoint, "HTTP server endpoint address")
 	flag.IntVar(&config.ReportInterval, "r", int(defaultReportInterval.Seconds()), "frequency of sending metrics to the server (seconds)")
 	flag.IntVar(&config.PollInterval, "p", int(defaultPollInterval.Seconds()), "frequency of polling metrics from runtime (seconds)")
+	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
 	flag.Parse()
 
 	return &config
@@ -97,6 +100,7 @@ func mergeConfigs(envConfig *AgentConfig, flagConfig *flagConfig) *AgentConfig {
 	config.Endpoint = resolveEndpoint(envConfig.Endpoint, flagConfig.Endpoint)
 	config.ReportInterval = resolveInterval(envConfig.ReportInterval, flagConfig.ReportInterval, defaultReportInterval)
 	config.PollInterval = resolveInterval(envConfig.PollInterval, flagConfig.PollInterval, defaultPollInterval)
+	config.CryptoKey = resolveString(envConfig.CryptoKey, flagConfig.CryptoKey)
 
 	return config
 }
@@ -130,4 +134,11 @@ func resolveInterval(envInterval time.Duration, flagInterval int, defaultInterva
 	}
 
 	return defaultInterval
+}
+
+func resolveString(envStr, flagStr string) string {
+	if envStr != "" {
+		return envStr
+	}
+	return flagStr
 }

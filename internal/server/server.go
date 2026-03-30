@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"crypto/rsa"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/F3dosik/metalert/internal/audit"
 	cfg "github.com/F3dosik/metalert/internal/config/server"
+	"github.com/F3dosik/metalert/internal/crypto"
 	"github.com/F3dosik/metalert/internal/handler"
 	"github.com/F3dosik/metalert/internal/middleware"
 	"github.com/F3dosik/metalert/internal/middleware/gzip"
@@ -40,6 +42,7 @@ type Server struct {
 	router     chi.Router
 	logger     *zap.SugaredLogger
 	dispatcher *audit.AuditDispatcher
+	privateKey *rsa.PrivateKey
 }
 
 // NewServer создаёт и конфигурирует сервер на основе cfg.
@@ -86,6 +89,10 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 		dispatcher.Register(audit.NewURLAuditObserver(cfg.AuditURL))
 	}
 
+	privateKey, err := crypto.LoadPrivateKey(cfg.CryptoKey)
+	if err != nil {
+		logger.Fatalw("failed to load private key", "error", err)
+	}
 	r := chi.NewRouter()
 
 	server := &Server{
@@ -94,6 +101,7 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 		router:     r,
 		logger:     logger,
 		dispatcher: dispatcher,
+		privateKey: privateKey,
 	}
 	server.routes()
 
@@ -117,6 +125,7 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 // asyncSave включается, если хранилище реализует [repository.Savable]
 // и StoreInterval == 0 (сохранение после каждого обновления).
 func (s *Server) routes() {
+	s.router.Use(middleware.DecryptMiddleware(s.privateKey, s.logger))
 	s.router.Use(gzip.WithCompression(s.logger))
 	s.router.Use(middleware.WithLogging(s.logger))
 
