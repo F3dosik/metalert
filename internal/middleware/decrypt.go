@@ -10,6 +10,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// DecryptMiddleware возвращает HTTP middleware, которое прозрачно расшифровывает
+// тело запроса перед передачей его следующему обработчику.
+//
+// Расшифровка выполняется только если выполнены оба условия:
+//   - передан ненулевой приватный RSA-ключ;
+//   - запрос содержит заголовок X-Encrypted: true.
+//
+// В случае успеха тело запроса заменяется расшифрованными данными,
+// Content-Length обновляется, а Content-Type устанавливается в application/json.
+// При ошибке чтения или расшифровки возвращается 400 Bad Request.
 func DecryptMiddleware(privateKey *rsa.PrivateKey, logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
