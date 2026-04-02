@@ -16,7 +16,7 @@ func RequireJSON(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 			if r.Header.Get("Content-Type") != "application/json" {
 				logger.Debug("wrong content-type", "got", r.Header.Get("Content-Type"))
 				http.Error(w, ErrUnnsuportedMethod, http.StatusMethodNotAllowed)
-				return 
+				return
 			}
 			next.ServeHTTP(w, r)
 		})

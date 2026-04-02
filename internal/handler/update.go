@@ -1,6 +1,3 @@
-// Package handler содержит HTTP-хэндлеры сервера метрик.
-// Здесь реализованы функции обработки POST-запросов,
-// проверки URL, типов и значений метрик и возврата ответов клиенту.
 package handler
 
 import (
@@ -8,24 +5,42 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"time"
 
 	"net/http"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/internal/service"
-	"github.com/F3dosik/metalert.git/pkg/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+
+	"github.com/F3dosik/metalert/internal/audit"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
-func UpdateHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+// UpdateHandler возвращает HTTP-хендлер для обновления метрики через URL-параметры.
+//
+// Маршрут: POST /update/{metType}/{metName}/{metValue}
+//
+// Параметры пути:
+//   - metType  — тип метрики ("gauge" или "counter")
+//   - metName  — имя метрики
+//   - metValue — новое значение метрики
+//
+// При успехе возвращает 200 OK с текстовым подтверждением.
+// При ошибке валидации — 400 Bad Request или 404 Not Found.
+func UpdateHandler(storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		update(w, r, storage, logger)
+		update(w, r, storage, dispatcher, logger)
 	}
 }
 
-func update(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger) {
-
+func update(
+	w http.ResponseWriter, r *http.Request,
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger,
+) {
 	var metName, metValue string
 
 	metType := models.MetricType(chi.URLParam(r, "metType"))
@@ -40,18 +55,43 @@ func update(w http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 
 	service.UpdateMetric(r.Context(), storage, metName, value)
 
+	go dispatcher.Publish(audit.AuditEvent{
+		Ts:        time.Now().Unix(),
+		Metrics:   []string{metName},
+		IPAddress: getIP(r),
+	})
+
 	message := fmt.Sprint("Метрика ", metName, " успешно обновлена\r\n")
 	RespondTextOK(w, message)
-
 }
 
-func UpdateJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
+// UpdateJSONHandler возвращает HTTP-хендлер для обновления одной метрики через JSON.
+//
+// Маршрут: POST /update/
+//
+// Тело запроса — JSON-объект типа models.Metric:
+//
+//	{"id": "cpu", "type": "gauge", "value": 72.5}
+//	{"id": "requests", "type": "counter", "delta": 1}
+//
+// При asyncSave=true после обновления асинхронно вызывает Save() у хранилища,
+// если оно реализует интерфейс repository.Savable.
+//
+// При успехе возвращает 200 OK. При ошибке — 400 Bad Request.
+func UpdateJSONHandler(
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, asyncSave bool,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updateJSON(w, r, storage, logger, asyncSave)
+		updateJSON(w, r, storage, dispatcher, logger, asyncSave)
 	}
 }
 
-func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
+func updateJSON(
+	w http.ResponseWriter, r *http.Request,
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, saveOnUpdate bool,
+) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric
@@ -66,6 +106,12 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.Metri
 		return
 	}
 
+	go dispatcher.Publish(audit.AuditEvent{
+		Ts:        time.Now().Unix(),
+		Metrics:   metricNames([]models.Metric{metric}),
+		IPAddress: getIP(r),
+	})
+
 	if saveOnUpdate {
 		if s, ok := storage.(repository.Savable); ok {
 			go func() {
@@ -79,16 +125,38 @@ func updateJSON(w http.ResponseWriter, r *http.Request, storage repository.Metri
 	logger.Debug("sending HTTP 200 response")
 	message := fmt.Sprint("Метрика ", metric.ID, " успешно обновлена\r\n")
 	RespondTextOK(w, message)
-
 }
 
-func UpdatesJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger, asyncSave bool) http.HandlerFunc {
+// UpdatesJSONHandler возвращает HTTP-хендлер для пакетного обновления метрик через JSON.
+//
+// Маршрут: POST /updates/
+//
+// Тело запроса — JSON-массив объектов типа models.Metric:
+//
+//	[
+//	  {"id": "cpu", "type": "gauge", "value": 72.5},
+//	  {"id": "requests", "type": "counter", "delta": 10}
+//	]
+//
+// Для хранилища типа DBMetricsStorage все метрики обновляются в одной транзакции.
+// При asyncSave=true после обновления асинхронно вызывает Save() у хранилища,
+// если оно реализует интерфейс repository.Savable.
+//
+// При успехе возвращает 200 OK. При пустом массиве или ошибке — 400 Bad Request.
+func UpdatesJSONHandler(
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, asyncSave bool,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updatesJSON(w, r, storage, logger, asyncSave)
+		updatesJSON(w, r, storage, dispatcher, logger, asyncSave)
 	}
 }
 
-func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger, saveOnUpdate bool) {
+func updatesJSON(
+	w http.ResponseWriter, r *http.Request,
+	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
+	logger *zap.SugaredLogger, saveOnUpdate bool,
+) {
 	logger.Debug("decoding request")
 
 	var metrics []models.Metric
@@ -105,6 +173,13 @@ func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.Metr
 		handleServiceError(w, logger, err)
 		return
 	}
+
+	go dispatcher.Publish(audit.AuditEvent{
+		Ts:        time.Now().Unix(),
+		Metrics:   metricNames(metrics),
+		IPAddress: getIP(r),
+	})
+
 	if saveOnUpdate {
 		if s, ok := storage.(repository.Savable); ok {
 			go func() {
@@ -117,6 +192,22 @@ func updatesJSON(w http.ResponseWriter, r *http.Request, storage repository.Metr
 	logger.Debug("sending HTTP 200 response")
 	message := fmt.Sprint("Успешно обновлено ", len(metrics), " метрик\r\n")
 	RespondTextOK(w, message)
+}
+
+func metricNames(metrics []models.Metric) []string {
+	names := make([]string, len(metrics))
+	for i, m := range metrics {
+		names[i] = m.ID
+	}
+	return names
+}
+
+func getIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
 }
 
 func updateMetrics(ctx context.Context, storage repository.MetricsStorage, metrics []models.Metric) error {
@@ -145,14 +236,16 @@ func validateMetric(metric models.Metric) error {
 	if err := metric.ValidateMeta(); err != nil {
 		return err
 	}
-
 	if err := metric.ValidateValue(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
+// handleServiceError переводит ошибки сервисного слоя в соответствующие HTTP-ответы:
+//   - ErrInvalidType, ErrInvalidValue, ErrInvalidDelta → 400 Bad Request
+//   - ErrNoName → 404 Not Found
+//   - остальные → 500 Internal Server Error
 func handleServiceError(w http.ResponseWriter, logger *zap.SugaredLogger, err error) {
 	switch {
 	case errors.Is(err, models.ErrInvalidType),

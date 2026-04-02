@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/F3dosik/metalert.git/internal/pgerrors"
-	"github.com/F3dosik/metalert.git/pkg/models"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/F3dosik/metalert/internal/pgerrors"
+	"github.com/F3dosik/metalert/pkg/models"
 )
 
+// runMigrations применяет SQL-миграции из директории migrations/ к базе данных по dsn.
+// Использует golang-migrate. Если миграции уже применены, возвращает nil.
 func runMigrations(dsn string) error {
 	m, err := migrate.New("file://migrations", dsn)
 	if err != nil {
@@ -36,10 +39,23 @@ func runMigrations(dsn string) error {
 	return nil
 }
 
+// DBMetricsStorage — хранилище метрик на основе PostgreSQL.
+//
+// Поддерживает операции upsert для gauge и counter, пакетное обновление
+// в транзакции через [DBMetricsStorage.UpdateMetricTx], а также
+// автоматический retry при временно недоступной БД.
+//
+// Создаётся через [NewDBMetricStorage], который автоматически применяет миграции.
 type DBMetricsStorage struct {
 	db *sql.DB
 }
 
+// NewDBMetricStorage создаёт DBMetricsStorage: применяет миграции, открывает
+// соединение с PostgreSQL и проверяет его через Ping.
+//
+// dsn — строка подключения в формате PostgreSQL DSN:
+//
+//	"postgres://user:password@localhost:5432/metrics?sslmode=disable"
 func NewDBMetricStorage(dsn string) (*DBMetricsStorage, error) {
 	if err := runMigrations(dsn); err != nil {
 		return nil, fmt.Errorf("migrations failed: %w", err)
@@ -50,9 +66,7 @@ func NewDBMetricStorage(dsn string) (*DBMetricsStorage, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 
-	storage := &DBMetricsStorage{
-		db: db,
-	}
+	storage := &DBMetricsStorage{db: db}
 	if err = storage.Ping(); err != nil {
 		return nil, err
 	}
@@ -60,6 +74,8 @@ func NewDBMetricStorage(dsn string) (*DBMetricsStorage, error) {
 	return storage, nil
 }
 
+// SetGauge устанавливает значение gauge-метрики в БД.
+// При конфликте по id перезаписывает существующее значение (upsert).
 func (d *DBMetricsStorage) SetGauge(ctx context.Context, name string, value models.Gauge) error {
 	err := withRetry(ctx, func() error {
 		_, err := d.db.ExecContext(ctx, `
@@ -78,6 +94,8 @@ func (d *DBMetricsStorage) SetGauge(ctx context.Context, name string, value mode
 	return nil
 }
 
+// GetGauge возвращает текущее значение gauge-метрики из БД.
+// Возвращает ошибку, если метрика не найдена.
 func (d *DBMetricsStorage) GetGauge(ctx context.Context, name string) (models.Gauge, error) {
 	var value models.Gauge
 
@@ -100,6 +118,8 @@ func (d *DBMetricsStorage) GetGauge(ctx context.Context, name string) (models.Ga
 	return value, nil
 }
 
+// AddCounter прибавляет value к текущему значению counter-метрики в БД.
+// Если метрика не существует, создаётся с переданным значением (upsert).
 func (d *DBMetricsStorage) AddCounter(ctx context.Context, name string, value models.Counter) error {
 	err := withRetry(ctx, func() error {
 		_, err := d.db.ExecContext(ctx, `
@@ -118,6 +138,8 @@ func (d *DBMetricsStorage) AddCounter(ctx context.Context, name string, value mo
 	return nil
 }
 
+// GetCounter возвращает текущее значение counter-метрики из БД.
+// Возвращает ошибку, если метрика не найдена.
 func (d *DBMetricsStorage) GetCounter(ctx context.Context, name string) (models.Counter, error) {
 	var delta models.Counter
 
@@ -140,6 +162,7 @@ func (d *DBMetricsStorage) GetCounter(ctx context.Context, name string) (models.
 	return delta, nil
 }
 
+// GetAllMetrics возвращает все метрики из таблицы metrics.
 func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, error) {
 	var metrics []models.Metric
 
@@ -180,7 +203,6 @@ func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, 
 
 		if err := rows.Err(); err != nil {
 			return err
-
 		}
 
 		metrics = tmpMetrics
@@ -194,6 +216,12 @@ func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, 
 	return metrics, nil
 }
 
+// UpdateMetricTx обновляет несколько метрик в одной транзакции.
+//
+// Для gauge выполняет upsert значения Value.
+// Для counter прибавляет Delta к существующему значению.
+// При ошибке транзакция откатывается.
+// Используется хендлером [handler.UpdatesJSONHandler] для пакетного обновления.
 func (d *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.Metric) error {
 	return withRetry(ctx, func() error {
 		tx, err := d.db.BeginTx(ctx, nil)
@@ -201,14 +229,15 @@ func (d *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.
 			return err
 		}
 		defer tx.Rollback()
+
 		query := `
-		INSERT INTO metrics (id, type, value, delta)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE 
-		SET 
-			value = COALESCE(EXCLUDED.value, metrics.value),
-			delta = COALESCE(metrics.delta + EXCLUDED.delta, metrics.delta);
-	`
+			INSERT INTO metrics (id, type, value, delta)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (id) DO UPDATE
+			SET
+				value = COALESCE(EXCLUDED.value, metrics.value),
+				delta = COALESCE(metrics.delta + EXCLUDED.delta, metrics.delta);
+		`
 		stmt, err := tx.PrepareContext(ctx, query)
 		if err != nil {
 			return err
@@ -233,6 +262,8 @@ func (d *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.
 	})
 }
 
+// Ping проверяет соединение с базой данных с таймаутом 10 секунд.
+// Используется хендлером [handler.PingDB] для проверки доступности БД.
 func (d *DBMetricsStorage) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -242,6 +273,10 @@ func (d *DBMetricsStorage) Ping() error {
 	})
 }
 
+// withRetry выполняет операцию op с повторными попытками при retriable-ошибках PostgreSQL.
+//
+// Стратегия задержек: 1с, 3с, 5с (итого до 4 попыток).
+// Прекращает попытки при отмене контекста или не-retriable ошибке.
 func withRetry(ctx context.Context, op func() error) error {
 	delays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 	maxAttempts := len(delays) + 1

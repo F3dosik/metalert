@@ -1,13 +1,24 @@
 package main
 
 import (
+	"cmp"
+	"fmt"
 	"log"
 
-	"github.com/F3dosik/metalert.git/internal/agent"
-	cfg "github.com/F3dosik/metalert.git/internal/config/agent"
+	"github.com/F3dosik/metalert/internal/agent"
+	cfg "github.com/F3dosik/metalert/internal/config/agent"
 )
 
+var buildVersion string
+var buildDate string
+var buildCommit string
+
 func main() {
+	fmt.Printf("Build version: %s\nBuild date: %s\nBuild commit: %s\n",
+		cmp.Or(buildVersion, "N/A"),
+		cmp.Or(buildDate, "N/A"),
+		cmp.Or(buildCommit, "N/A"))
+
 	cfg, err := cfg.LoadAgentConfig()
 	if err != nil {
 		log.Fatalf("Configuration loading error: %v", err)

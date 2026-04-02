@@ -5,9 +5,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/F3dosik/metalert.git/internal/repository"
-	"github.com/F3dosik/metalert.git/pkg/logger"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/F3dosik/metalert/internal/audit"
+	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/pkg/logger"
 )
 
 func TestUpdate(t *testing.T) {
@@ -91,10 +93,11 @@ func TestUpdate(t *testing.T) {
 			baseLogger, sugarLogger := logger.NewLogger("development")
 			defer func() { _ = baseLogger.Sync() }()
 
-			// Создаем полноценный router как в server.go
+			dispatcher := &audit.AuditDispatcher{}
+
 			r := chi.NewRouter()
 			r.Route("/update", func(r chi.Router) {
-				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage, sugarLogger))
+				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage, dispatcher, sugarLogger))
 			})
 
 			req := httptest.NewRequest(tt.method, tt.url, nil)

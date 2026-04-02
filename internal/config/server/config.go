@@ -8,8 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/F3dosik/metalert.git/pkg/logger"
 	"github.com/caarlos0/env/v6"
+
+	"github.com/F3dosik/metalert/pkg/logger"
 )
 
 type ServerConfig struct {
@@ -21,6 +22,9 @@ type ServerConfig struct {
 	Restore         bool   `env:"RESTORE"`
 
 	DatabaseDSN string `env:"DATABASE_DSN"`
+
+	AuditFile string `env:"AUDIT_FILE"`
+	AuditURL  string `env:"AUDIT_URL"`
 }
 
 var (
@@ -35,6 +39,8 @@ const (
 	defaultFileStoragePath = ""
 	defaultRestore         = false
 	defaultDSN             = ""
+	defaultAuditFile       = ""
+	defaultAuditURL        = ""
 )
 
 func (c *ServerConfig) Validate() error {
@@ -85,6 +91,8 @@ type flagConfig struct {
 	FileStoragePath string
 	Restore         bool
 	DatabaseDSN     string
+	AuditFile       string
+	AuditURL        string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -96,6 +104,8 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.FileStoragePath, "f", "", "file storage path")
 	flag.BoolVar(&config.Restore, "r", false, "restore metrics from file")
 	flag.StringVar(&config.DatabaseDSN, "d", "", "PostgreSQL DSN")
+	flag.StringVar(&config.AuditFile, "audit-file", "", "the path to the file where the audit logs are saved. If the parameter is not passed, the audit should be disabled")
+	flag.StringVar(&config.AuditURL, "audit-url", "", "the full URL where the audit logs are sent. If the parameter is not passed, the audit should be disabled")
 	flag.Parse()
 
 	return &config
@@ -110,6 +120,8 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig
 	config.FileStoragePath = resolveString(envConfig.FileStoragePath, flagConfig.FileStoragePath, defaultFileStoragePath)
 	config.Restore = resolveBool("RESTORE", envConfig.Restore, flagConfig.Restore, defaultRestore)
 	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
+	config.AuditFile = resolveString(envConfig.AuditFile, flagConfig.AuditFile, defaultAuditFile)
+	config.AuditURL = resolveString(envConfig.AuditURL, flagConfig.AuditURL, defaultAuditURL)
 
 	return config
 }

@@ -1,0 +1,26 @@
+package service_test
+
+import (
+	"testing"
+
+	"github.com/F3dosik/metalert/internal/service"
+	"github.com/F3dosik/metalert/pkg/models"
+)
+
+func BenchmarkCheckAndParseValue_Gauge(b *testing.B) {
+	for b.Loop() {
+		service.CheckAndParseValue(models.TypeGauge, "Alloc", "123.45")
+	}
+}
+
+func BenchmarkCheckAndParseValue_Counter(b *testing.B) {
+	for b.Loop() {
+		service.CheckAndParseValue(models.TypeCounter, "Requests", "42")
+	}
+}
+
+func BenchmarkCheckAndParseValue_InvalidType(b *testing.B) {
+	for b.Loop() {
+		service.CheckAndParseValue("unknown", "Alloc", "123.45")
+	}
+}
