@@ -12,6 +12,9 @@ package agent
 
 import (
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/F3dosik/metalert/internal/crypto"
@@ -46,7 +49,7 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey 
 
 	publicKey, err := crypto.LoadPublicKey(cryptoKey)
 	if err != nil {
-		log.Printf(err.Error())
+		log.Printf("%s", err.Error())
 	}
 
 	sender := NewSender(endpoint, publicKey)
@@ -59,12 +62,20 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey 
 	defer tickerPoll.Stop()
 	defer tickerReport.Stop()
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+
 	for {
 		select {
 		case <-tickerPoll.C:
 			metrics.Update()
 		case <-tickerReport.C:
 			sender.SendMetrics(metrics, "JSON", true)
+		case <-sigs:
+			log.Print("Получен сигнал завершения, отправляем имеющиеся метрики...")
+			sender.SendMetrics(metrics, "JSON", true)
+			log.Print("Aгент завершен")
+			return
 		}
 	}
 }
