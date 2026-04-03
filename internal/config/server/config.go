@@ -128,7 +128,6 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.AuditURL, "audit-url", "", "the full URL where the audit logs are sent. If the parameter is not passed, the audit should be disabled")
 	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
 	flag.StringVar(&config.JSONConfigPath, "config", "", "name of the configuration JSON file")
-	flag.StringVar(&config.JSONConfigPath, "c", "", "name of the configuration JSON file (shorthand)")
 	flag.Parse()
 
 	return &config

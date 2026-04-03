@@ -27,14 +27,13 @@ func DecryptMiddleware(privateKey *rsa.PrivateKey, logger *zap.SugaredLogger) fu
 				next.ServeHTTP(w, r)
 				return
 			}
-
+			defer r.Body.Close()
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, "read body error", http.StatusBadRequest)
-				logger.Debugw("decrype middleware: read body", "error", err)
+				logger.Debugw("decrypt middleware: read body", "error", err)
 				return
 			}
-			defer r.Body.Close()
 
 			decrypted, err := crypto.Decrypt(body, privateKey)
 			if err != nil {
