@@ -30,6 +30,8 @@ type ServerConfig struct {
 
 	CryptoKey      string `env:"CRYPTO_KEY"`
 	JSONConfigPath string `env:"CONFIG"`
+
+	TrustedSubnet string `env:"TRUSTED_SUBNET"`
 }
 
 var (
@@ -113,6 +115,7 @@ type flagConfig struct {
 	AuditURL        string
 	CryptoKey       string
 	JSONConfigPath  string
+	TrustedSubnet   string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -128,6 +131,8 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.AuditURL, "audit-url", "", "the full URL where the audit logs are sent. If the parameter is not passed, the audit should be disabled")
 	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
 	flag.StringVar(&config.JSONConfigPath, "config", "", "name of the configuration JSON file")
+	flag.StringVar(&config.TrustedSubnet, "t", "", "string representation of classless addressing (CIDR)")
+
 	flag.Parse()
 
 	return &config
@@ -140,6 +145,7 @@ type jsonConfig struct {
 	FileStoragePath string `json:"store_file"`
 	DatabaseDSN     string `json:"database_dsn"`
 	CryptoKey       string `json:"crypto_key"`
+	TrustedSubnet   string `json:"trusted_subnet"`
 }
 
 func parseJSONConfig(path string) (*jsonConfig, error) {
@@ -160,7 +166,7 @@ func parseJSONConfig(path string) (*jsonConfig, error) {
 func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig, jsonCfg *jsonConfig) *ServerConfig {
 	config := &ServerConfig{}
 
-	var jsonAddr, jsonFile, jsonDSN, jsonCrypto string
+	var jsonAddr, jsonFile, jsonDSN, jsonCrypto, jsonTrustedSubnet string
 	var jsonRestore *bool
 	jsonInterval := -1
 
@@ -170,6 +176,8 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig, jsonCfg *json
 		jsonFile = jsonCfg.FileStoragePath
 		jsonDSN = jsonCfg.DatabaseDSN
 		jsonCrypto = jsonCfg.CryptoKey
+		jsonTrustedSubnet = jsonCfg.TrustedSubnet
+
 		if jsonCfg.StoreInterval != "" {
 			if d, err := time.ParseDuration(jsonCfg.StoreInterval); err == nil {
 				jsonInterval = int(d.Seconds())
@@ -186,6 +194,7 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig, jsonCfg *json
 	config.AuditFile = resolveString(envConfig.AuditFile, flagConfig.AuditFile, "", defaultAuditFile)
 	config.AuditURL = resolveString(envConfig.AuditURL, flagConfig.AuditURL, "", defaultAuditURL)
 	config.CryptoKey = resolveString(envConfig.CryptoKey, flagConfig.CryptoKey, jsonCrypto, "")
+	config.TrustedSubnet = resolveString(envConfig.TrustedSubnet, flagConfig.TrustedSubnet, jsonTrustedSubnet, "")
 
 	return config
 }

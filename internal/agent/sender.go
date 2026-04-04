@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -29,8 +30,11 @@ type Sender struct {
 	// Client — HTTP-клиент resty с настроенным таймаутом.
 	Client *resty.Client
 
-	// CryptoKey -публичный ключ для поддержки асимметричного шифрования.
+	// CryptoKey — публичный ключ для поддержки асимметричного шифрования.
 	CryptoKey *rsa.PublicKey
+
+	// LocalIP — IP-адрес хоста агента, передаётся в заголовке X-Real-IP.
+	LocalIP string
 }
 
 // NewSender создаёт Sender, настроенный на отправку метрик по адресу serverURL.
@@ -43,7 +47,30 @@ func NewSender(serverURL string, publicKey *rsa.PublicKey) *Sender {
 		ServerURL: serverURL,
 		Client:    client,
 		CryptoKey: publicKey,
+		LocalIP:   resolveLocalIP(serverURL),
 	}
+}
+
+// resolveLocalIP определяет локальный IP-адрес, используемый для соединения с сервером.
+// Использует UDP-соединение (без отправки пакетов) для выбора нужного интерфейса.
+func resolveLocalIP(serverURL string) string {
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		return ""
+	}
+	host := parsed.Host
+	if host == "" {
+		return ""
+	}
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		host = host + ":80"
+	}
+	conn, err := net.Dial("udp", host)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
 
 // SendMetrics отправляет все метрики из memMetrics на сервер.
@@ -169,6 +196,8 @@ func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 	if compress {
 		req.SetHeader("Content-Encoding", "gzip")
 	}
+
+	req.SetHeader("X-Real-IP", s.LocalIP)
 
 	resp, err := req.Post(fullURL)
 	if err != nil {

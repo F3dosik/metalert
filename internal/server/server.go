@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"io"
+	"net"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -37,12 +38,13 @@ import (
 // Агрегирует конфигурацию, хранилище, роутер, логгер и диспетчер аудита.
 // Создаётся через [NewServer], запускается через [Server.Run].
 type Server struct {
-	config     *cfg.ServerConfig
-	storage    repository.MetricsStorage
-	router     chi.Router
-	logger     *zap.SugaredLogger
-	dispatcher *audit.AuditDispatcher
-	privateKey *rsa.PrivateKey
+	config        *cfg.ServerConfig
+	storage       repository.MetricsStorage
+	router        chi.Router
+	logger        *zap.SugaredLogger
+	dispatcher    *audit.AuditDispatcher
+	privateKey    *rsa.PrivateKey
+	trustedSubnet *net.IPNet
 }
 
 // NewServer создаёт и конфигурирует сервер на основе cfg.
@@ -93,15 +95,26 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 	if err != nil {
 		logger.Fatalw("failed to load private key", "error", err)
 	}
+
+	var ipNet *net.IPNet
+	if cfg.TrustedSubnet != "" {
+		var err error
+		_, ipNet, err = net.ParseCIDR(cfg.TrustedSubnet)
+		if err != nil {
+			logger.Fatalw("failed to parse CIDR", "error", err)
+		}
+	}
+
 	r := chi.NewRouter()
 
 	server := &Server{
-		config:     cfg,
-		storage:    storage,
-		router:     r,
-		logger:     logger,
-		dispatcher: dispatcher,
-		privateKey: privateKey,
+		config:        cfg,
+		storage:       storage,
+		router:        r,
+		logger:        logger,
+		dispatcher:    dispatcher,
+		privateKey:    privateKey,
+		trustedSubnet: ipNet,
 	}
 	server.routes()
 
@@ -125,6 +138,7 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 // asyncSave включается, если хранилище реализует [repository.Savable]
 // и StoreInterval == 0 (сохранение после каждого обновления).
 func (s *Server) routes() {
+	s.router.Use(middleware.RequireTrustedSubnet(s.logger, s.trustedSubnet))
 	s.router.Use(middleware.DecryptMiddleware(s.privateKey, s.logger))
 	s.router.Use(gzip.WithCompression(s.logger))
 	s.router.Use(middleware.WithLogging(s.logger))
@@ -205,7 +219,6 @@ func (s *Server) Run() {
 		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
 
-	s.dispatcher.Wait()
 	s.dispatcher.Close()
 
 }
