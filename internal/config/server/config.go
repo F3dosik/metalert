@@ -1,12 +1,14 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env/v6"
 
@@ -25,6 +27,9 @@ type ServerConfig struct {
 
 	AuditFile string `env:"AUDIT_FILE"`
 	AuditURL  string `env:"AUDIT_URL"`
+
+	CryptoKey      string `env:"CRYPTO_KEY"`
+	JSONConfigPath string `env:"CONFIG"`
 }
 
 var (
@@ -65,13 +70,26 @@ func LoadServerConfig() (*ServerConfig, error) {
 	envConfig := parseEnvConfig()
 	flagConfig := parseFlagConfig()
 
-	config := mergeConfigs(envConfig, flagConfig)
+	jsonConfigPath := envConfig.JSONConfigPath
+	if jsonConfigPath == "" {
+		jsonConfigPath = flagConfig.JSONConfigPath
+	}
+
+	var jsonCfg *jsonConfig
+	if jsonConfigPath != "" {
+		var err error
+		jsonCfg, err = parseJSONConfig(jsonConfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse JSON config: %w", err)
+		}
+	}
+
+	config := mergeConfigs(envConfig, flagConfig, jsonCfg)
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
 	return config, nil
-
 }
 
 func parseEnvConfig() *ServerConfig {
@@ -93,6 +111,8 @@ type flagConfig struct {
 	DatabaseDSN     string
 	AuditFile       string
 	AuditURL        string
+	CryptoKey       string
+	JSONConfigPath  string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -106,52 +126,105 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.DatabaseDSN, "d", "", "PostgreSQL DSN")
 	flag.StringVar(&config.AuditFile, "audit-file", "", "the path to the file where the audit logs are saved. If the parameter is not passed, the audit should be disabled")
 	flag.StringVar(&config.AuditURL, "audit-url", "", "the full URL where the audit logs are sent. If the parameter is not passed, the audit should be disabled")
+	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
+	flag.StringVar(&config.JSONConfigPath, "config", "", "name of the configuration JSON file")
 	flag.Parse()
 
 	return &config
 }
 
-func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig) *ServerConfig {
+type jsonConfig struct {
+	Address         string `json:"address"`
+	Restore         *bool  `json:"restore"`
+	StoreInterval   string `json:"store_interval"`
+	FileStoragePath string `json:"store_file"`
+	DatabaseDSN     string `json:"database_dsn"`
+	CryptoKey       string `json:"crypto_key"`
+}
+
+func parseJSONConfig(path string) (*jsonConfig, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var config jsonConfig
+	if err := json.NewDecoder(file).Decode(&config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig, jsonCfg *jsonConfig) *ServerConfig {
 	config := &ServerConfig{}
 
-	config.Addr = resolveString(envConfig.Addr, flagConfig.Address, defaultAddr)
-	config.LogMode = resolveString(envConfig.LogMode, flagConfig.LogMode, defaultLogMode)
-	config.StoreInterval = resolveDuration("STORE_INTERVAL", envConfig.StoreInterval, flagConfig.StoreInterval, defaultStoreInterval)
-	config.FileStoragePath = resolveString(envConfig.FileStoragePath, flagConfig.FileStoragePath, defaultFileStoragePath)
-	config.Restore = resolveBool("RESTORE", envConfig.Restore, flagConfig.Restore, defaultRestore)
-	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, defaultDSN)
-	config.AuditFile = resolveString(envConfig.AuditFile, flagConfig.AuditFile, defaultAuditFile)
-	config.AuditURL = resolveString(envConfig.AuditURL, flagConfig.AuditURL, defaultAuditURL)
+	var jsonAddr, jsonFile, jsonDSN, jsonCrypto string
+	var jsonRestore *bool
+	jsonInterval := -1
+
+	if jsonCfg != nil {
+		jsonAddr = jsonCfg.Address
+		jsonRestore = jsonCfg.Restore
+		jsonFile = jsonCfg.FileStoragePath
+		jsonDSN = jsonCfg.DatabaseDSN
+		jsonCrypto = jsonCfg.CryptoKey
+		if jsonCfg.StoreInterval != "" {
+			if d, err := time.ParseDuration(jsonCfg.StoreInterval); err == nil {
+				jsonInterval = int(d.Seconds())
+			}
+		}
+	}
+
+	config.Addr = resolveString(envConfig.Addr, flagConfig.Address, jsonAddr, defaultAddr)
+	config.LogMode = resolveString(envConfig.LogMode, flagConfig.LogMode, "", defaultLogMode)
+	config.StoreInterval = resolveDuration("STORE_INTERVAL", envConfig.StoreInterval, flagConfig.StoreInterval, jsonInterval, defaultStoreInterval)
+	config.FileStoragePath = resolveString(envConfig.FileStoragePath, flagConfig.FileStoragePath, jsonFile, defaultFileStoragePath)
+	config.Restore = resolveBool("RESTORE", envConfig.Restore, flagConfig.Restore, jsonRestore, defaultRestore)
+	config.DatabaseDSN = resolveString(envConfig.DatabaseDSN, flagConfig.DatabaseDSN, jsonDSN, defaultDSN)
+	config.AuditFile = resolveString(envConfig.AuditFile, flagConfig.AuditFile, "", defaultAuditFile)
+	config.AuditURL = resolveString(envConfig.AuditURL, flagConfig.AuditURL, "", defaultAuditURL)
+	config.CryptoKey = resolveString(envConfig.CryptoKey, flagConfig.CryptoKey, jsonCrypto, "")
 
 	return config
 }
 
-func resolveString(envVal, flagVal, def string) string {
+func resolveString(envVal, flagVal, jsonVal, def string) string {
 	if envVal != "" {
 		return envVal
 	}
 	if flagVal != "" {
 		return flagVal
 	}
+	if jsonVal != "" {
+		return jsonVal
+	}
 	return def
 }
 
-func resolveDuration(envName string, envVal, flagVal, def int) int {
+func resolveDuration(envName string, envVal, flagVal, jsonVal, def int) int {
 	if _, ok := os.LookupEnv(envName); ok {
 		return envVal
 	}
 	if flagVal >= 0 {
 		return flagVal
 	}
+	if jsonVal >= 0 {
+		return jsonVal
+	}
 	return def
 }
 
-func resolveBool(envName string, envVal, flagVal, def bool) bool {
+func resolveBool(envName string, envVal, flagVal bool, jsonVal *bool, def bool) bool {
 	if _, ok := os.LookupEnv(envName); ok {
 		return envVal
 	}
 	if flagVal {
 		return true
+	}
+	if jsonVal != nil {
+		return *jsonVal
 	}
 	return def
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/F3dosik/metalert/pkg/models"
 )
@@ -70,7 +71,9 @@ func NewFileMetricsStorage(fileName string, restore bool) (*FileMetricsStorage, 
 //
 // Реализует интерфейс [Savable], что позволяет хендлерам вызывать Save
 // асинхронно после каждого обновления метрики.
-func (f *FileMetricsStorage) Save(ctx context.Context) error {
+func (f *FileMetricsStorage) Save() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	metrics, _ := f.GetAllMetrics(ctx)
 
 	data, err := json.Marshal(&metrics)
@@ -121,8 +124,8 @@ func (f *FileMetricsStorage) load(ctx context.Context) error {
 // после чего атомарно переименовывает его в целевой fileName.
 //
 // Следует вызывать при завершении работы сервера (например, через defer).
-func (f *FileMetricsStorage) Close(ctx context.Context) error {
-	if err := f.Save(ctx); err != nil {
+func (f *FileMetricsStorage) Close() error {
+	if err := f.Save(); err != nil {
 		return fmt.Errorf("save before close: %w", err)
 	}
 

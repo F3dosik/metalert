@@ -145,6 +145,8 @@ func (d *AuditDispatcher) Wait() {
 }
 
 func (d *AuditDispatcher) Close() {
+	d.Wait()
+
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 

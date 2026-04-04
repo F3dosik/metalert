@@ -12,8 +12,12 @@ package agent
 
 import (
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/F3dosik/metalert/internal/crypto"
 	"github.com/F3dosik/metalert/pkg/models"
 )
 
@@ -29,7 +33,7 @@ import (
 // Пример:
 //
 //	agent.Run("http://localhost:8080", 10*time.Second, 2*time.Second)
-func Run(endpoint string, reportInterval, pollInterval time.Duration) {
+func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey string) {
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
@@ -43,7 +47,12 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 	log.Printf("│    • ReportInterval: %-17v │", reportInterval)
 	log.Printf("└────────────────────────────────────────┘")
 
-	sender := NewSender(endpoint)
+	publicKey, err := crypto.LoadPublicKey(cryptoKey)
+	if err != nil {
+		log.Printf("%s", err.Error())
+	}
+
+	sender := NewSender(endpoint, publicKey)
 
 	metrics.Update()
 	sender.SendMetrics(metrics, "JSON", true)
@@ -53,12 +62,20 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration) {
 	defer tickerPoll.Stop()
 	defer tickerReport.Stop()
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+
 	for {
 		select {
 		case <-tickerPoll.C:
 			metrics.Update()
 		case <-tickerReport.C:
 			sender.SendMetrics(metrics, "JSON", true)
+		case <-sigs:
+			log.Print("Получен сигнал завершения, отправляем имеющиеся метрики...")
+			sender.SendMetrics(metrics, "JSON", true)
+			log.Print("Aгент завершен")
+			return
 		}
 	}
 }

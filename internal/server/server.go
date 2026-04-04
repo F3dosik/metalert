@@ -12,8 +12,9 @@ package server
 
 import (
 	"context"
+	"crypto/rsa"
+	"io"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/F3dosik/metalert/internal/audit"
 	cfg "github.com/F3dosik/metalert/internal/config/server"
+	"github.com/F3dosik/metalert/internal/crypto"
 	"github.com/F3dosik/metalert/internal/handler"
 	"github.com/F3dosik/metalert/internal/middleware"
 	"github.com/F3dosik/metalert/internal/middleware/gzip"
@@ -40,6 +42,7 @@ type Server struct {
 	router     chi.Router
 	logger     *zap.SugaredLogger
 	dispatcher *audit.AuditDispatcher
+	privateKey *rsa.PrivateKey
 }
 
 // NewServer создаёт и конфигурирует сервер на основе cfg.
@@ -86,6 +89,10 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 		dispatcher.Register(audit.NewURLAuditObserver(cfg.AuditURL))
 	}
 
+	privateKey, err := crypto.LoadPrivateKey(cfg.CryptoKey)
+	if err != nil {
+		logger.Fatalw("failed to load private key", "error", err)
+	}
 	r := chi.NewRouter()
 
 	server := &Server{
@@ -94,6 +101,7 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 		router:     r,
 		logger:     logger,
 		dispatcher: dispatcher,
+		privateKey: privateKey,
 	}
 	server.routes()
 
@@ -117,6 +125,7 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 // asyncSave включается, если хранилище реализует [repository.Savable]
 // и StoreInterval == 0 (сохранение после каждого обновления).
 func (s *Server) routes() {
+	s.router.Use(middleware.DecryptMiddleware(s.privateKey, s.logger))
 	s.router.Use(gzip.WithCompression(s.logger))
 	s.router.Use(middleware.WithLogging(s.logger))
 
@@ -148,6 +157,10 @@ func (s *Server) routes() {
 //  2. Даёт серверу 5 секунд на завершение активных запросов
 //  3. Ожидает завершения всех горутин аудита через [audit.AuditDispatcher.Wait]
 func (s *Server) Run() {
+	ctx, stop := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
 	s.logger.Infow("Запуск сервера, config:",
 		"addr", s.config.Addr,
 		"log_mode", s.config.LogMode,
@@ -160,7 +173,7 @@ func (s *Server) Run() {
 	)
 
 	if _, ok := s.storage.(repository.Savable); s.config.StoreInterval > 0 && ok {
-		go s.AutoSave()
+		go s.AutoSave(ctx)
 	}
 
 	srv := &http.Server{
@@ -169,24 +182,19 @@ func (s *Server) Run() {
 	}
 
 	go func() {
-		stop := make(chan os.Signal, 1)
-		signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-		<-stop
+		<-ctx.Done()
 
 		s.logger.Infow("Получен сигнал завершения, сохраняем метрики...")
 
-		if fileStorage, ok := s.storage.(*repository.FileMetricsStorage); ok {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-
-			if err := fileStorage.Close(ctx); err != nil {
+		if closer, ok := s.storage.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
 				s.logger.Warnw("Ошибка при закрытии storage", "error", err)
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
 			s.logger.Fatalw(err.Error(), "event", "Принудительное завершение сервера")
 		}
 
@@ -207,7 +215,7 @@ func (s *Server) Run() {
 // Запускается из [Server.Run] в отдельной горутине, если StoreInterval > 0
 // и хранилище реализует [repository.Savable].
 // При ошибке сохранения логирует предупреждение и продолжает работу.
-func (s *Server) AutoSave() {
+func (s *Server) AutoSave(ctx context.Context) {
 	savable, ok := s.storage.(repository.Savable)
 	if !ok {
 		s.logger.Warn("Хранилище не поддерживает автосохранение")
@@ -218,11 +226,16 @@ func (s *Server) AutoSave() {
 	ticker := time.NewTicker(time.Duration(s.config.StoreInterval) * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if err := savable.Save(); err != nil {
-			s.logger.Warnw("Ошибка при автосохранении", "error", err)
-		} else {
-			s.logger.Debug("Метрики успешно сохранены")
+	for {
+		select {
+		case <-ticker.C:
+			if err := savable.Save(); err != nil {
+				s.logger.Warnw("Ошибка при автосохранении", "error", err)
+			} else {
+				s.logger.Debug("Метрики успешно сохранены")
+			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }

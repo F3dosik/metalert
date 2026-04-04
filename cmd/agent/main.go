@@ -9,9 +9,11 @@ import (
 	cfg "github.com/F3dosik/metalert/internal/config/agent"
 )
 
-var buildVersion string
-var buildDate string
-var buildCommit string
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
 
 func main() {
 	fmt.Printf("Build version: %s\nBuild date: %s\nBuild commit: %s\n",
@@ -23,5 +25,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("Configuration loading error: %v", err)
 	}
-	agent.Run(cfg.Endpoint, cfg.ReportInterval, cfg.PollInterval)
+	agent.Run(cfg.Endpoint, cfg.ReportInterval, cfg.PollInterval, cfg.CryptoKey)
 }
