@@ -25,5 +25,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("Configuration loading error: %v", err)
 	}
-	agent.Run(cfg.Endpoint, cfg.ReportInterval, cfg.PollInterval, cfg.CryptoKey)
+	agent.Run(cfg.Endpoint, cfg.ReportInterval, cfg.PollInterval, cfg.CryptoKey, cfg.GRPCEndpoint)
 }

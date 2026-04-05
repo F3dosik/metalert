@@ -19,6 +19,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration `env:"POLL_INTERVAL"`
 	CryptoKey      string        `env:"CRYPTO_KEY"`
 	JSONConfigPath string        `env:"CONFIG"`
+	GRPCEndpoint   string        `env:"GRPC_ADDRESS"`
 }
 
 var (
@@ -98,6 +99,7 @@ type flagConfig struct {
 	PollInterval   int
 	CryptoKey      string
 	JSONConfigPath string
+	GRPCEndpoint   string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -109,6 +111,7 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
 	flag.StringVar(&config.JSONConfigPath, "config", "", "name of the configuration JSON file")
 	flag.StringVar(&config.JSONConfigPath, "c", "", "name of the configuration JSON file (shorthand)")
+	flag.StringVar(&config.GRPCEndpoint, "grpc-addr", "", "gRPC server address (host:port)")
 	flag.Parse()
 
 	return &config
@@ -157,6 +160,7 @@ func mergeConfigs(envConfig *AgentConfig, flagConfig *flagConfig, jsonCfg *jsonC
 	config.ReportInterval = resolveInterval(envConfig.ReportInterval, flagConfig.ReportInterval, jsonReportInterval, defaultReportInterval)
 	config.PollInterval = resolveInterval(envConfig.PollInterval, flagConfig.PollInterval, jsonPollInterval, defaultPollInterval)
 	config.CryptoKey = resolveString(envConfig.CryptoKey, flagConfig.CryptoKey, jsonCryptoKey)
+	config.GRPCEndpoint = resolveString(envConfig.GRPCEndpoint, flagConfig.GRPCEndpoint, "")
 
 	return config
 }

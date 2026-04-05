@@ -23,13 +23,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/F3dosik/metalert/internal/audit"
 	cfg "github.com/F3dosik/metalert/internal/config/server"
 	"github.com/F3dosik/metalert/internal/crypto"
+	grpcserver "github.com/F3dosik/metalert/internal/grpc"
 	"github.com/F3dosik/metalert/internal/handler"
 	"github.com/F3dosik/metalert/internal/middleware"
 	"github.com/F3dosik/metalert/internal/middleware/gzip"
+	pb "github.com/F3dosik/metalert/internal/proto"
 	"github.com/F3dosik/metalert/internal/repository"
 )
 
@@ -41,6 +44,7 @@ type Server struct {
 	config        *cfg.ServerConfig
 	storage       repository.MetricsStorage
 	router        chi.Router
+	listener      net.Listener
 	logger        *zap.SugaredLogger
 	dispatcher    *audit.AuditDispatcher
 	privateKey    *rsa.PrivateKey
@@ -107,10 +111,16 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 
 	r := chi.NewRouter()
 
+	lis, err := net.Listen("tcp", cfg.AddrGRPC)
+	if err != nil {
+		logger.Fatalw("failed to announces on the local network address", "error", err)
+	}
+
 	server := &Server{
 		config:        cfg,
 		storage:       storage,
 		router:        r,
+		listener:      lis,
 		logger:        logger,
 		dispatcher:    dispatcher,
 		privateKey:    privateKey,
@@ -184,6 +194,7 @@ func (s *Server) Run() {
 		"DatabaseDSN", s.config.DatabaseDSN,
 		"AuditFile", s.config.AuditFile,
 		"AuditURL", s.config.AuditURL,
+		"TrustedSubnet", s.config.TrustedSubnet,
 	)
 
 	if _, ok := s.storage.(repository.Savable); s.config.StoreInterval > 0 && ok {
@@ -194,6 +205,13 @@ func (s *Server) Run() {
 		Addr:    s.config.Addr,
 		Handler: s.router,
 	}
+
+	grpcSrv := grpc.NewServer(
+		grpc.UnaryInterceptor(grpcserver.SubnetInterceptor(s.trustedSubnet)),
+	)
+	pb.RegisterMetricsServer(grpcSrv, grpcserver.NewMetricsServer(s.storage))
+
+	go grpcSrv.Serve(s.listener)
 
 	go func() {
 		<-ctx.Done()
@@ -211,6 +229,8 @@ func (s *Server) Run() {
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			s.logger.Fatalw(err.Error(), "event", "Принудительное завершение сервера")
 		}
+
+		grpcSrv.GracefulStop()
 
 		s.logger.Infow("Сервер завершен")
 	}()

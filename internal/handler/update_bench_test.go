@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
 	"github.com/F3dosik/metalert/pkg/models"
 )
 
@@ -33,35 +34,6 @@ func makeBatch(b *testing.B, n int) []models.Metric {
 	return metrics
 }
 
-// --- validateMetric ---
-
-func BenchmarkValidateMetric_Gauge(b *testing.B) {
-	m := gaugeMetric(b, "Alloc", 123.45)
-	b.ReportAllocs()
-
-	for b.Loop() {
-		validateMetric(m)
-	}
-}
-
-func BenchmarkValidateMetric_Counter(b *testing.B) {
-	m := counterMetric(b, "Requests", 42)
-	b.ReportAllocs()
-
-	for b.Loop() {
-		validateMetric(m)
-	}
-}
-
-func BenchmarkValidateMetric_InvalidType(b *testing.B) {
-	m := models.Metric{ID: "X", MType: "unknown"}
-	b.ReportAllocs()
-
-	for b.Loop() {
-		validateMetric(m)
-	}
-}
-
 // --- updateMetrics ---
 
 func BenchmarkUpdateMetrics_Single(b *testing.B) {
@@ -71,7 +43,7 @@ func BenchmarkUpdateMetrics_Single(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		updateMetrics(ctx, s, metrics)
+		service.UpdateMetrics(ctx, s, metrics)
 	}
 }
 
@@ -82,7 +54,7 @@ func BenchmarkUpdateMetrics_Batch10(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		updateMetrics(ctx, s, metrics)
+		service.UpdateMetrics(ctx, s, metrics)
 	}
 }
 
@@ -93,6 +65,6 @@ func BenchmarkUpdateMetrics_Batch100(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		updateMetrics(ctx, s, metrics)
+		service.UpdateMetrics(ctx, s, metrics)
 	}
 }

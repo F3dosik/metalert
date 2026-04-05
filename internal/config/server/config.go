@@ -32,6 +32,7 @@ type ServerConfig struct {
 	JSONConfigPath string `env:"CONFIG"`
 
 	TrustedSubnet string `env:"TRUSTED_SUBNET"`
+	AddrGRPC      string `env:"GRPC_ADDRESS"`
 }
 
 var (
@@ -48,6 +49,7 @@ const (
 	defaultDSN             = ""
 	defaultAuditFile       = ""
 	defaultAuditURL        = ""
+	defaultAddrGRPC        = "localhost:3200"
 )
 
 func (c *ServerConfig) Validate() error {
@@ -116,6 +118,7 @@ type flagConfig struct {
 	CryptoKey       string
 	JSONConfigPath  string
 	TrustedSubnet   string
+	AddrGRPC        string
 }
 
 func parseFlagConfig() *flagConfig {
@@ -132,6 +135,7 @@ func parseFlagConfig() *flagConfig {
 	flag.StringVar(&config.CryptoKey, "crypto-key", "", "the full path to the file with the public key")
 	flag.StringVar(&config.JSONConfigPath, "config", "", "name of the configuration JSON file")
 	flag.StringVar(&config.TrustedSubnet, "t", "", "string representation of classless addressing (CIDR)")
+	flag.StringVar(&config.AddrGRPC, "grpc-addr", "", "gRPC server listen address")
 
 	flag.Parse()
 
@@ -195,6 +199,7 @@ func mergeConfigs(envConfig *ServerConfig, flagConfig *flagConfig, jsonCfg *json
 	config.AuditURL = resolveString(envConfig.AuditURL, flagConfig.AuditURL, "", defaultAuditURL)
 	config.CryptoKey = resolveString(envConfig.CryptoKey, flagConfig.CryptoKey, jsonCrypto, "")
 	config.TrustedSubnet = resolveString(envConfig.TrustedSubnet, flagConfig.TrustedSubnet, jsonTrustedSubnet, "")
+	config.AddrGRPC = resolveString(envConfig.AddrGRPC, flagConfig.AddrGRPC, "", defaultAddrGRPC)
 
 	return config
 }

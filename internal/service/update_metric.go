@@ -37,3 +37,25 @@ func UpdateMetricFromStruct(ctx context.Context, storage repository.MetricsStora
 
 	return nil
 }
+
+func UpdateMetrics(ctx context.Context, storage repository.MetricsStorage, metrics []models.Metric) error {
+	for _, metric := range metrics {
+		if err := ValidateMetric(metric); err != nil {
+			return err
+		}
+	}
+
+	switch s := storage.(type) {
+	case *repository.DBMetricsStorage:
+		if err := s.UpdateMetricTx(ctx, metrics); err != nil {
+			return err
+		}
+	default:
+		for _, metric := range metrics {
+			if err := UpdateMetricFromStruct(ctx, s, metric); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

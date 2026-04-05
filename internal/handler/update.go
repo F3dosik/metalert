@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,7 +100,7 @@ func updateJSON(
 		return
 	}
 
-	if err := updateMetrics(r.Context(), storage, []models.Metric{metric}); err != nil {
+	if err := service.UpdateMetrics(r.Context(), storage, []models.Metric{metric}); err != nil {
 		handleServiceError(w, logger, err)
 		return
 	}
@@ -169,7 +168,7 @@ func updatesJSON(
 		http.Error(w, "empty metrics array", http.StatusBadRequest)
 		return
 	}
-	if err := updateMetrics(r.Context(), storage, metrics); err != nil {
+	if err := service.UpdateMetrics(r.Context(), storage, metrics); err != nil {
 		handleServiceError(w, logger, err)
 		return
 	}
@@ -208,38 +207,6 @@ func getIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return ip
-}
-
-func updateMetrics(ctx context.Context, storage repository.MetricsStorage, metrics []models.Metric) error {
-	for _, metric := range metrics {
-		if err := validateMetric(metric); err != nil {
-			return err
-		}
-	}
-
-	switch s := storage.(type) {
-	case *repository.DBMetricsStorage:
-		if err := s.UpdateMetricTx(ctx, metrics); err != nil {
-			return err
-		}
-	default:
-		for _, metric := range metrics {
-			if err := service.UpdateMetricFromStruct(ctx, s, metric); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func validateMetric(metric models.Metric) error {
-	if err := metric.ValidateMeta(); err != nil {
-		return err
-	}
-	if err := metric.ValidateValue(); err != nil {
-		return err
-	}
-	return nil
 }
 
 // handleServiceError переводит ошибки сервисного слоя в соответствующие HTTP-ответы:
