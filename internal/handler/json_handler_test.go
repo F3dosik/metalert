@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,8 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert/internal/audit"
 	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
 	"github.com/F3dosik/metalert/pkg/models"
 )
 
@@ -20,19 +21,16 @@ func testLog() *zap.SugaredLogger {
 	return l.Sugar()
 }
 
-func setup(t *testing.T) (*repository.MemMetricsStorage, *audit.AuditDispatcher, *zap.SugaredLogger) {
+func newTestService(t *testing.T) service.MetricsService {
 	t.Helper()
-	return repository.NewMemMetricsStorage(), &audit.AuditDispatcher{}, testLog()
+	return service.NewMetricsService(repository.NewMemMetricsStorage(), nil, false, testLog())
 }
 
 // ── UpdateJSONHandler ────────────────────────────────────────────────────────
 
 func TestUpdateJSONHandler_Gauge(t *testing.T) {
-	storage, dispatcher, sugar := setup(t)
-	_ = sugar
-
-	log := testLog()
-	h := UpdateJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdateJSONHandler(svc, testLog())
 
 	v := models.Gauge(42.0)
 	body, _ := json.Marshal(models.Metric{ID: "cpu", MType: models.TypeGauge, Value: &v})
@@ -48,9 +46,8 @@ func TestUpdateJSONHandler_Gauge(t *testing.T) {
 }
 
 func TestUpdateJSONHandler_Counter(t *testing.T) {
-	storage, dispatcher, _ := setup(t)
-	log := testLog()
-	h := UpdateJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdateJSONHandler(svc, testLog())
 
 	d := models.Counter(7)
 	body, _ := json.Marshal(models.Metric{ID: "req", MType: models.TypeCounter, Delta: &d})
@@ -65,9 +62,8 @@ func TestUpdateJSONHandler_Counter(t *testing.T) {
 }
 
 func TestUpdateJSONHandler_InvalidJSON(t *testing.T) {
-	storage, dispatcher, _ := setup(t)
-	log := testLog()
-	h := UpdateJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdateJSONHandler(svc, testLog())
 
 	req := httptest.NewRequest(http.MethodPost, "/update/", bytes.NewBufferString("bad json"))
 	rr := httptest.NewRecorder()
@@ -79,9 +75,8 @@ func TestUpdateJSONHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestUpdateJSONHandler_InvalidMetric(t *testing.T) {
-	storage, dispatcher, _ := setup(t)
-	log := testLog()
-	h := UpdateJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdateJSONHandler(svc, testLog())
 
 	// Gauge without value → validation error
 	body, _ := json.Marshal(models.Metric{ID: "cpu", MType: models.TypeGauge})
@@ -97,9 +92,8 @@ func TestUpdateJSONHandler_InvalidMetric(t *testing.T) {
 // ── UpdatesJSONHandler ───────────────────────────────────────────────────────
 
 func TestUpdatesJSONHandler_Batch(t *testing.T) {
-	storage, dispatcher, _ := setup(t)
-	log := testLog()
-	h := UpdatesJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdatesJSONHandler(svc, testLog())
 
 	v := models.Gauge(1.1)
 	d := models.Counter(5)
@@ -119,9 +113,8 @@ func TestUpdatesJSONHandler_Batch(t *testing.T) {
 }
 
 func TestUpdatesJSONHandler_EmptyArray(t *testing.T) {
-	storage, dispatcher, _ := setup(t)
-	log := testLog()
-	h := UpdatesJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdatesJSONHandler(svc, testLog())
 
 	body, _ := json.Marshal([]models.Metric{})
 	req := httptest.NewRequest(http.MethodPost, "/updates/", bytes.NewReader(body))
@@ -134,9 +127,8 @@ func TestUpdatesJSONHandler_EmptyArray(t *testing.T) {
 }
 
 func TestUpdatesJSONHandler_InvalidJSON(t *testing.T) {
-	storage, dispatcher, _ := setup(t)
-	log := testLog()
-	h := UpdatesJSONHandler(storage, dispatcher, log, false)
+	svc := newTestService(t)
+	h := UpdatesJSONHandler(svc, testLog())
 
 	req := httptest.NewRequest(http.MethodPost, "/updates/", bytes.NewBufferString("bad"))
 	rr := httptest.NewRecorder()
@@ -150,12 +142,11 @@ func TestUpdatesJSONHandler_InvalidJSON(t *testing.T) {
 // ── ValueJSONHandler ─────────────────────────────────────────────────────────
 
 func TestValueJSONHandler_Gauge(t *testing.T) {
-	storage, _, _ := setup(t)
-	log := testLog()
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
-	_ = storage.SetGauge(ctx, "cpu", 72.5)
+	svc := newTestService(t)
+	v := models.Gauge(72.5)
+	_ = svc.UpdateMany(context.Background(), []models.Metric{{ID: "cpu", MType: models.TypeGauge, Value: &v}}, "")
 
-	h := ValueJSONHandler(storage, log)
+	h := ValueJSONHandler(svc, testLog())
 	body, _ := json.Marshal(models.Metric{ID: "cpu", MType: models.TypeGauge})
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
@@ -172,12 +163,11 @@ func TestValueJSONHandler_Gauge(t *testing.T) {
 }
 
 func TestValueJSONHandler_Counter(t *testing.T) {
-	storage, _, _ := setup(t)
-	log := testLog()
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
-	_ = storage.AddCounter(ctx, "hits", 42)
+	svc := newTestService(t)
+	d := models.Counter(42)
+	_ = svc.UpdateMany(context.Background(), []models.Metric{{ID: "hits", MType: models.TypeCounter, Delta: &d}}, "")
 
-	h := ValueJSONHandler(storage, log)
+	h := ValueJSONHandler(svc, testLog())
 	body, _ := json.Marshal(models.Metric{ID: "hits", MType: models.TypeCounter})
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewReader(body))
 	rr := httptest.NewRecorder()
@@ -194,9 +184,8 @@ func TestValueJSONHandler_Counter(t *testing.T) {
 }
 
 func TestValueJSONHandler_NotFound(t *testing.T) {
-	storage, _, _ := setup(t)
-	log := testLog()
-	h := ValueJSONHandler(storage, log)
+	svc := newTestService(t)
+	h := ValueJSONHandler(svc, testLog())
 
 	body, _ := json.Marshal(models.Metric{ID: "missing", MType: models.TypeGauge})
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewReader(body))
@@ -209,9 +198,8 @@ func TestValueJSONHandler_NotFound(t *testing.T) {
 }
 
 func TestValueJSONHandler_InvalidJSON(t *testing.T) {
-	storage, _, _ := setup(t)
-	log := testLog()
-	h := ValueJSONHandler(storage, log)
+	svc := newTestService(t)
+	h := ValueJSONHandler(svc, testLog())
 
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewBufferString("bad"))
 	rr := httptest.NewRecorder()
@@ -223,9 +211,8 @@ func TestValueJSONHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestValueJSONHandler_InvalidMeta(t *testing.T) {
-	storage, _, _ := setup(t)
-	log := testLog()
-	h := ValueJSONHandler(storage, log)
+	svc := newTestService(t)
+	h := ValueJSONHandler(svc, testLog())
 
 	body, _ := json.Marshal(models.Metric{ID: "", MType: models.TypeGauge})
 	req := httptest.NewRequest(http.MethodPost, "/value/", bytes.NewReader(body))
@@ -240,14 +227,12 @@ func TestValueJSONHandler_InvalidMeta(t *testing.T) {
 // ── ValueHandler (URL) ───────────────────────────────────────────────────────
 
 func TestValueHandler_GaugeFound(t *testing.T) {
-	storage, _, _ := setup(t)
-	log := testLog()
-	_ = log
-	ctx := httptest.NewRequest(http.MethodGet, "/", nil).Context()
-	_ = storage.SetGauge(ctx, "temp", 36.6)
+	svc := newTestService(t)
+	v := models.Gauge(36.6)
+	_ = svc.UpdateMany(context.Background(), []models.Metric{{ID: "temp", MType: models.TypeGauge, Value: &v}}, "")
 
 	r := chi.NewRouter()
-	r.Get("/value/{metType}/{metName}", ValueHandler(storage))
+	r.Get("/value/{metType}/{metName}", ValueHandler(svc))
 
 	req := httptest.NewRequest(http.MethodGet, "/value/gauge/temp", nil)
 	rr := httptest.NewRecorder()
@@ -259,9 +244,9 @@ func TestValueHandler_GaugeFound(t *testing.T) {
 }
 
 func TestValueHandler_NotFound(t *testing.T) {
-	storage, _, _ := setup(t)
+	svc := newTestService(t)
 	r := chi.NewRouter()
-	r.Get("/value/{metType}/{metName}", ValueHandler(storage))
+	r.Get("/value/{metType}/{metName}", ValueHandler(svc))
 
 	req := httptest.NewRequest(http.MethodGet, "/value/gauge/missing", nil)
 	rr := httptest.NewRecorder()
@@ -273,9 +258,9 @@ func TestValueHandler_NotFound(t *testing.T) {
 }
 
 func TestValueHandler_InvalidType(t *testing.T) {
-	storage, _, _ := setup(t)
+	svc := newTestService(t)
 	r := chi.NewRouter()
-	r.Get("/value/{metType}/{metName}", ValueHandler(storage))
+	r.Get("/value/{metType}/{metName}", ValueHandler(svc))
 
 	req := httptest.NewRequest(http.MethodGet, "/value/badtype/x", nil)
 	rr := httptest.NewRecorder()

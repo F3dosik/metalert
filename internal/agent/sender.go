@@ -53,6 +53,23 @@ func NewSender(serverURL, grpcEndpoint string, publicKey *rsa.PublicKey) *Sender
 	client := resty.New()
 	client.SetTimeout(5 * time.Second)
 
+	// Настройка политики по ретраям
+	client.SetRetryCount(3)
+	client.SetRetryWaitTime(1 * time.Second)
+	client.SetRetryMaxWaitTime(10 * time.Second)
+	client.AddRetryCondition(func(r *resty.Response, err error) bool {
+		// Повторять при сетевых ошибках
+		if err != nil {
+			return true
+		}
+		// Повторять при ошибках 5xx
+		if r.StatusCode() >= 500 {
+			return true
+		}
+		// Повторять при 408 (Request Timeout), 429 (Too Many Requests)
+		return r.StatusCode() == http.StatusRequestTimeout || r.StatusCode() == http.StatusTooManyRequests
+	})
+
 	s := &Sender{
 		ServerURL: serverURL,
 		Client:    client,

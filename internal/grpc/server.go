@@ -40,7 +40,7 @@ func (s *MetricsServer) UpdateMetrics(ctx context.Context, req *pb.UpdateMetrics
 		metrics = append(metrics, metric)
 	}
 
-	if err := service.UpdateMetrics(ctx, s.storage, metrics); err != nil {
+	if err := service.UpdateMetrics(ctx, s.storage, metrics, nil, ""); err != nil {
 		return nil, status.Errorf(codes.Internal, "update metrics: %v", err)
 	}
 

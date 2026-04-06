@@ -37,6 +37,10 @@ type MetricsStorage interface {
 
 	// GetAllMetrics возвращает все метрики из хранилища.
 	GetAllMetrics(ctx context.Context) ([]models.Metric, error)
+
+	// UpdateMany атомарно обновляет набор метрик.
+	// Реализации вправе выполнять обновление в одной транзакции (DB) или последовательно (memory/file).
+	UpdateMany(ctx context.Context, metrics []models.Metric) error
 }
 
 // Savable — дополнительный интерфейс для хранилищ, поддерживающих сброс на диск.

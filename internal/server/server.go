@@ -12,13 +12,14 @@ package server
 
 import (
 	"context"
-	"crypto/rsa"
 	"io"
 	"net"
 	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"crypto/rsa"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -34,66 +35,87 @@ import (
 	"github.com/F3dosik/metalert/internal/middleware/gzip"
 	pb "github.com/F3dosik/metalert/internal/proto"
 	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
 )
 
-// Server — HTTP-сервер сбора и хранения метрик.
+// app holds the domain layer: repository, service, and audit dispatcher.
+// It is responsible for building and tearing down domain-level dependencies.
+type app struct {
+	storage    repository.MetricsStorage
+	svc        service.MetricsService
+	dispatcher *audit.AuditDispatcher
+	logger     *zap.SugaredLogger
+}
+
+func newApp(c *cfg.ServerConfig, logger *zap.SugaredLogger) *app {
+	storage := buildStorage(c, logger)
+	dispatcher := buildDispatcher(c, logger)
+
+	_, isSavable := storage.(repository.Savable)
+	asyncSave := isSavable && c.StoreInterval == 0
+
+	svc := service.NewMetricsService(storage, dispatcher, asyncSave, logger)
+
+	return &app{
+		storage:    storage,
+		svc:        svc,
+		dispatcher: dispatcher,
+		logger:     logger,
+	}
+}
+
+// close flushes and closes all domain resources.
+func (a *app) close() {
+	if closer, ok := a.storage.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			a.logger.Warnw("Ошибка при закрытии storage", "error", err)
+		}
+	}
+	a.dispatcher.Close()
+}
+
+// autoSave periodically flushes metrics to disk while ctx is alive.
+func (a *app) autoSave(ctx context.Context, interval int) {
+	savable, ok := a.storage.(repository.Savable)
+	if !ok {
+		a.logger.Warn("Хранилище не поддерживает автосохранение")
+		return
+	}
+	a.logger.Infow("Включено автосохранение метрик", "interval", interval)
+
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := savable.Save(); err != nil {
+				a.logger.Warnw("Ошибка при автосохранении", "error", err)
+			} else {
+				a.logger.Debug("Метрики успешно сохранены")
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// Server is the transport layer: HTTP + gRPC routing wired to the domain via app.
 //
-// Агрегирует конфигурацию, хранилище, роутер, логгер и диспетчер аудита.
 // Создаётся через [NewServer], запускается через [Server.Run].
 type Server struct {
 	config        *cfg.ServerConfig
-	storage       repository.MetricsStorage
+	app           *app
 	router        chi.Router
 	listener      net.Listener
 	logger        *zap.SugaredLogger
-	dispatcher    *audit.AuditDispatcher
-	privateKey    *rsa.PrivateKey
 	trustedSubnet *net.IPNet
+	privateKey    *rsa.PrivateKey
 }
 
 // NewServer создаёт и конфигурирует сервер на основе cfg.
-//
-// Порядок выбора хранилища:
-//  1. DatabaseDSN задан → [repository.NewDBMetricStorage]
-//  2. FileStoragePath задан → [repository.NewFileMetricsStorage]
-//  3. Иначе → [repository.NewMemMetricsStorage]
-//
-// Аудит-наблюдатели регистрируются по наличию полей AuditFile и AuditURL в конфиге.
-// Маршруты настраиваются вызовом [Server.routes].
 func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
-	var storage repository.MetricsStorage
-	var err error
-
-	if cfg.DatabaseDSN != "" {
-		storage, err = repository.NewDBMetricStorage(cfg.DatabaseDSN)
-		if err != nil {
-			logger.Warnw("failed to create DBMetricStorage", "error", err)
-		}
-		logger.Infow("Storage selected", "type", "DB", "database", cfg.DatabaseDSN)
-	} else if cfg.FileStoragePath != "" {
-		logger.Infow("Database DSN not set — using file storage only")
-		storage, err = repository.NewFileMetricsStorage(cfg.FileStoragePath, cfg.Restore)
-		if err != nil {
-			logger.Warnw("failed to create New FileMetricStorage", "error", err)
-		}
-		logger.Infow("Storage selected", "type", "File", "file_path", cfg.FileStoragePath)
-	} else {
-		logger.Infow("Database DSN and filesStoragePath not set — using memory storage only")
-		storage = repository.NewMemMetricsStorage()
-		logger.Infow("Storage selected", "type", "Memory")
-	}
-
-	dispatcher := audit.NewAuditDispatcher(logger)
-	if cfg.AuditFile != "" {
-		observer, err := audit.NewFileAuditObserver(cfg.AuditFile)
-		if err != nil {
-			logger.Fatalw("failed to create file observer", "error", err)
-		}
-		dispatcher.Register(observer)
-	}
-	if cfg.AuditURL != "" {
-		dispatcher.Register(audit.NewURLAuditObserver(cfg.AuditURL))
-	}
+	a := newApp(cfg, logger)
 
 	privateKey, err := crypto.LoadPrivateKey(cfg.CryptoKey)
 	if err != nil {
@@ -102,84 +124,60 @@ func NewServer(cfg *cfg.ServerConfig, logger *zap.SugaredLogger) *Server {
 
 	var ipNet *net.IPNet
 	if cfg.TrustedSubnet != "" {
-		var err error
 		_, ipNet, err = net.ParseCIDR(cfg.TrustedSubnet)
 		if err != nil {
 			logger.Fatalw("failed to parse CIDR", "error", err)
 		}
 	}
 
-	r := chi.NewRouter()
-
 	lis, err := net.Listen("tcp", cfg.AddrGRPC)
 	if err != nil {
 		logger.Fatalw("failed to announces on the local network address", "error", err)
 	}
 
-	server := &Server{
+	s := &Server{
 		config:        cfg,
-		storage:       storage,
-		router:        r,
+		app:           a,
+		router:        chi.NewRouter(),
 		listener:      lis,
 		logger:        logger,
-		dispatcher:    dispatcher,
-		privateKey:    privateKey,
 		trustedSubnet: ipNet,
+		privateKey:    privateKey,
 	}
-	server.routes()
+	s.routes()
 
-	return server
+	return s
 }
 
 // routes регистрирует все HTTP-маршруты сервера.
-//
-// Глобальные middleware: gzip-сжатие, структурированное логирование.
-//
-// Маршруты:
-//   - GET  /                              — список всех метрик
-//   - POST /update/{metType}/{metName}/{metValue} — обновление через URL
-//   - POST /update/                       — обновление одной метрики (JSON)
-//   - POST /updates/                      — пакетное обновление (JSON)
-//   - POST /value/                        — получение метрики (JSON)
-//   - GET  /value/{metType}/{metName}     — получение метрики через URL
-//   - GET  /ping                          — проверка соединения с БД
-//   - GET  /debug/*                       — pprof-профилировщик
-//
-// asyncSave включается, если хранилище реализует [repository.Savable]
-// и StoreInterval == 0 (сохранение после каждого обновления).
 func (s *Server) routes() {
 	s.router.Use(middleware.RequireTrustedSubnet(s.logger, s.trustedSubnet))
 	s.router.Use(middleware.DecryptMiddleware(s.privateKey, s.logger))
 	s.router.Use(gzip.WithCompression(s.logger))
 	s.router.Use(middleware.WithLogging(s.logger))
 
-	s.router.Get("/", handler.MainHandler(s.storage))
+	svc := s.app.svc
 
-	_, isSavable := s.storage.(repository.Savable)
-	asyncSave := isSavable && s.config.StoreInterval == 0
+	s.router.Get("/", handler.MainHandler(svc))
 
 	s.router.Route("/update/", func(r chi.Router) {
-		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(s.storage, s.dispatcher, s.logger, asyncSave))
-		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(s.storage, s.dispatcher, s.logger))
+		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.UpdateJSONHandler(svc, s.logger))
+		r.Post("/{metType}/{metName}/{metValue}", handler.UpdateHandler(svc, s.logger))
 	})
-	s.router.With(middleware.RequireJSON(s.logger)).Post("/updates/", handler.UpdatesJSONHandler(s.storage, s.dispatcher, s.logger, asyncSave))
+	s.router.With(middleware.RequireJSON(s.logger)).Post("/updates/", handler.UpdatesJSONHandler(svc, s.logger))
 	s.router.Route("/value", func(r chi.Router) {
-		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(s.storage, s.logger))
-		r.Get("/{metType}/{metName}", handler.ValueHandler(s.storage))
+		r.With(middleware.RequireJSON(s.logger)).Post("/", handler.ValueJSONHandler(svc, s.logger))
+		r.Get("/{metType}/{metName}", handler.ValueHandler(svc))
 	})
-	s.router.Get("/ping", handler.PingDB(s.storage, s.logger))
+	s.router.Get("/ping", handler.PingDB(svc, s.logger))
 	s.router.Mount("/debug", chiMiddleware.Profiler())
 }
 
 // Run запускает HTTP-сервер и блокирует выполнение до получения сигнала завершения.
 //
-// Если StoreInterval > 0 и хранилище реализует [repository.Savable],
-// запускает [Server.AutoSave] в отдельной горутине.
-//
 // Graceful shutdown по SIGINT / SIGTERM:
-//  1. Сохраняет метрики (для [repository.FileMetricsStorage] — вызывает Close)
+//  1. Закрывает domain-ресурсы (storage, dispatcher)
 //  2. Даёт серверу 5 секунд на завершение активных запросов
-//  3. Ожидает завершения всех горутин аудита через [audit.AuditDispatcher.Wait]
 func (s *Server) Run() {
 	ctx, stop := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -197,19 +195,23 @@ func (s *Server) Run() {
 		"TrustedSubnet", s.config.TrustedSubnet,
 	)
 
-	if _, ok := s.storage.(repository.Savable); s.config.StoreInterval > 0 && ok {
-		go s.AutoSave(ctx)
+	if s.config.StoreInterval > 0 {
+		go s.app.autoSave(ctx, s.config.StoreInterval)
 	}
 
-	srv := &http.Server{
-		Addr:    s.config.Addr,
-		Handler: s.router,
+	httpSrv := &http.Server{
+		Addr:           s.config.Addr,
+		Handler:        s.router,
+		ReadTimeout:    5 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	grpcSrv := grpc.NewServer(
 		grpc.UnaryInterceptor(grpcserver.SubnetInterceptor(s.trustedSubnet)),
 	)
-	pb.RegisterMetricsServer(grpcSrv, grpcserver.NewMetricsServer(s.storage))
+	pb.RegisterMetricsServer(grpcSrv, grpcserver.NewMetricsServer(s.app.storage))
 
 	go grpcSrv.Serve(s.listener)
 
@@ -217,16 +219,11 @@ func (s *Server) Run() {
 		<-ctx.Done()
 
 		s.logger.Infow("Получен сигнал завершения, сохраняем метрики...")
-
-		if closer, ok := s.storage.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				s.logger.Warnw("Ошибка при закрытии storage", "error", err)
-			}
-		}
+		s.app.close()
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
 			s.logger.Fatalw(err.Error(), "event", "Принудительное завершение сервера")
 		}
 
@@ -235,40 +232,51 @@ func (s *Server) Run() {
 		s.logger.Infow("Сервер завершен")
 	}()
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		s.logger.Fatalw(err.Error(), "event", "Запуск сервера")
 	}
-
-	s.dispatcher.Close()
-
 }
 
 // AutoSave периодически сохраняет метрики в хранилище через интервал StoreInterval.
 //
 // Запускается из [Server.Run] в отдельной горутине, если StoreInterval > 0
 // и хранилище реализует [repository.Savable].
-// При ошибке сохранения логирует предупреждение и продолжает работу.
 func (s *Server) AutoSave(ctx context.Context) {
-	savable, ok := s.storage.(repository.Savable)
-	if !ok {
-		s.logger.Warn("Хранилище не поддерживает автосохранение")
-		return
-	}
-	s.logger.Infow("Включено автосохранение метрик", "interval", s.config.StoreInterval)
+	s.app.autoSave(ctx, s.config.StoreInterval)
+}
 
-	ticker := time.NewTicker(time.Duration(s.config.StoreInterval) * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := savable.Save(); err != nil {
-				s.logger.Warnw("Ошибка при автосохранении", "error", err)
-			} else {
-				s.logger.Debug("Метрики успешно сохранены")
-			}
-		case <-ctx.Done():
-			return
+func buildStorage(c *cfg.ServerConfig, logger *zap.SugaredLogger) repository.MetricsStorage {
+	if c.DatabaseDSN != "" {
+		storage, err := repository.NewDBMetricStorage(c.DatabaseDSN)
+		if err != nil {
+			logger.Warnw("failed to create DBMetricStorage", "error", err)
 		}
+		logger.Infow("Storage selected", "type", "DB", "database", c.DatabaseDSN)
+		return storage
 	}
+	if c.FileStoragePath != "" {
+		storage, err := repository.NewFileMetricsStorage(c.FileStoragePath, c.Restore)
+		if err != nil {
+			logger.Warnw("failed to create FileMetricStorage", "error", err)
+		}
+		logger.Infow("Storage selected", "type", "File", "file_path", c.FileStoragePath)
+		return storage
+	}
+	logger.Infow("Storage selected", "type", "Memory")
+	return repository.NewMemMetricsStorage()
+}
+
+func buildDispatcher(c *cfg.ServerConfig, logger *zap.SugaredLogger) *audit.AuditDispatcher {
+	dispatcher := audit.NewAuditDispatcher(logger)
+	if c.AuditFile != "" {
+		observer, err := audit.NewFileAuditObserver(c.AuditFile)
+		if err != nil {
+			logger.Fatalw("failed to create file observer", "error", err)
+		}
+		dispatcher.Register(observer)
+	}
+	if c.AuditURL != "" {
+		dispatcher.Register(audit.NewURLAuditObserver(c.AuditURL))
+	}
+	return dispatcher
 }

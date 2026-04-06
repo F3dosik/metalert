@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/F3dosik/metalert/internal/audit"
 	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
 	"github.com/F3dosik/metalert/pkg/logger"
 )
 
@@ -27,13 +27,6 @@ func TestUpdate(t *testing.T) {
 			contentType: "text/plain",
 			want:        http.StatusOK,
 		},
-		// {
-		// 	name:        "Content-Type != text/plain",
-		// 	method:      http.MethodPost,
-		// 	url:         "/update/gauge/name/40",
-		// 	contentType: "application/json",
-		// 	want:        http.StatusBadRequest,
-		// },
 		{
 			name:        "GET запрос",
 			method:      http.MethodGet,
@@ -53,8 +46,7 @@ func TestUpdate(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauges",
 			contentType: "text/plain",
-
-			want: http.StatusNotFound,
+			want:        http.StatusNotFound,
 		},
 		{
 			name:        "Отсутствует имя метрики",
@@ -88,16 +80,14 @@ func TestUpdate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := repository.NewMemMetricsStorage()
-
 			baseLogger, sugarLogger := logger.NewLogger("development")
 			defer func() { _ = baseLogger.Sync() }()
 
-			dispatcher := &audit.AuditDispatcher{}
+			svc := service.NewMetricsService(repository.NewMemMetricsStorage(), nil, false, sugarLogger)
 
 			r := chi.NewRouter()
 			r.Route("/update", func(r chi.Router) {
-				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(storage, dispatcher, sugarLogger))
+				r.Post("/{metType}/{metName}/{metValue}", UpdateHandler(svc, sugarLogger))
 			})
 
 			req := httptest.NewRequest(tt.method, tt.url, nil)

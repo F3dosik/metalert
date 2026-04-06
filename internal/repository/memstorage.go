@@ -95,6 +95,23 @@ func (f *MemMetricsStorage) GetCounter(ctx context.Context, metName string) (mod
 	return v, nil
 }
 
+// UpdateMany последовательно обновляет каждую метрику из набора.
+func (f *MemMetricsStorage) UpdateMany(ctx context.Context, metrics []models.Metric) error {
+	for _, m := range metrics {
+		switch m.MType {
+		case models.TypeGauge:
+			if err := f.SetGauge(ctx, m.ID, *m.Value); err != nil {
+				return err
+			}
+		case models.TypeCounter:
+			if err := f.AddCounter(ctx, m.ID, *m.Delta); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // GetAllMetrics возвращает снимок всех метрик из хранилища в произвольном порядке.
 func (f *MemMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, error) {
 	f.mutex.RLock()

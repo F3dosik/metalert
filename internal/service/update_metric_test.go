@@ -12,7 +12,7 @@ func TestUpdateMetric_Gauge(t *testing.T) {
 	storage := repository.NewMemMetricsStorage()
 	ctx := context.Background()
 
-	if err := UpdateMetric(ctx, storage, "cpu", models.Gauge(55.5)); err != nil {
+	if err := UpdateMetric(ctx, storage, "cpu", models.Gauge(55.5), nil, ""); err != nil {
 		t.Fatalf("UpdateMetric gauge: %v", err)
 	}
 
@@ -29,10 +29,10 @@ func TestUpdateMetric_Counter(t *testing.T) {
 	storage := repository.NewMemMetricsStorage()
 	ctx := context.Background()
 
-	if err := UpdateMetric(ctx, storage, "hits", models.Counter(10)); err != nil {
+	if err := UpdateMetric(ctx, storage, "hits", models.Counter(10), nil, ""); err != nil {
 		t.Fatalf("UpdateMetric counter: %v", err)
 	}
-	if err := UpdateMetric(ctx, storage, "hits", models.Counter(5)); err != nil {
+	if err := UpdateMetric(ctx, storage, "hits", models.Counter(5), nil, ""); err != nil {
 		t.Fatalf("UpdateMetric counter second: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestUpdateMetric_Counter(t *testing.T) {
 func TestUpdateMetric_UnknownType(t *testing.T) {
 	storage := repository.NewMemMetricsStorage()
 	// Неизвестный тип — UpdateMetric просто ничего не делает, ошибку не возвращает.
-	if err := UpdateMetric(context.Background(), storage, "x", "unexpected-type"); err != nil {
+	if err := UpdateMetric(context.Background(), storage, "x", "unexpected-type", nil, ""); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestUpdateMetrics_ValidBatch(t *testing.T) {
 		{ID: "req", MType: models.TypeCounter, Delta: &d},
 	}
 
-	if err := UpdateMetrics(ctx, storage, metrics); err != nil {
+	if err := UpdateMetrics(ctx, storage, metrics, nil, ""); err != nil {
 		t.Fatalf("UpdateMetrics: %v", err)
 	}
 
@@ -116,14 +116,14 @@ func TestUpdateMetrics_InvalidMetric(t *testing.T) {
 	metrics := []models.Metric{
 		{ID: "", MType: models.TypeGauge},
 	}
-	if err := UpdateMetrics(context.Background(), storage, metrics); err == nil {
+	if err := UpdateMetrics(context.Background(), storage, metrics, nil, ""); err == nil {
 		t.Error("expected error for invalid metric")
 	}
 }
 
 func TestUpdateMetrics_EmptyBatch(t *testing.T) {
 	storage := repository.NewMemMetricsStorage()
-	if err := UpdateMetrics(context.Background(), storage, nil); err != nil {
+	if err := UpdateMetrics(context.Background(), storage, nil, nil, ""); err != nil {
 		t.Errorf("unexpected error for empty batch: %v", err)
 	}
 }
