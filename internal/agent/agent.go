@@ -33,7 +33,7 @@ import (
 // Пример:
 //
 //	agent.Run("http://localhost:8080", 10*time.Second, 2*time.Second)
-func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey string) {
+func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey, grpcEndpoint string) {
 	metrics := &Metrics{
 		Gauges:   make(map[string]models.Gauge),
 		Counters: make(map[string]models.Counter),
@@ -52,10 +52,15 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey 
 		log.Printf("%s", err.Error())
 	}
 
-	sender := NewSender(endpoint, publicKey)
+	sender := NewSender(endpoint, grpcEndpoint, publicKey)
+
+	sendType := "JSON"
+	if grpcEndpoint != "" {
+		sendType = "GRPC"
+	}
 
 	metrics.Update()
-	sender.SendMetrics(metrics, "JSON", true)
+	sender.SendMetrics(metrics, sendType, true)
 
 	tickerPoll := time.NewTicker(pollInterval)
 	tickerReport := time.NewTicker(reportInterval)
@@ -70,10 +75,10 @@ func Run(endpoint string, reportInterval, pollInterval time.Duration, cryptoKey 
 		case <-tickerPoll.C:
 			metrics.Update()
 		case <-tickerReport.C:
-			sender.SendMetrics(metrics, "JSON", true)
+			sender.SendMetrics(metrics, sendType, true)
 		case <-sigs:
 			log.Print("Получен сигнал завершения, отправляем имеющиеся метрики...")
-			sender.SendMetrics(metrics, "JSON", true)
+			sender.SendMetrics(metrics, sendType, true)
 			log.Print("Aгент завершен")
 			return
 		}

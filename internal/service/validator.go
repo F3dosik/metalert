@@ -79,3 +79,13 @@ func parseCounterValue(metValue string) (models.Counter, error) {
 	}
 	return models.Counter(i), nil
 }
+
+func ValidateMetric(metric models.Metric) error {
+	if err := metric.ValidateMeta(); err != nil {
+		return err
+	}
+	if err := metric.ValidateValue(); err != nil {
+		return err
+	}
+	return nil
+}

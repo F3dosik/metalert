@@ -11,29 +11,25 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert/internal/audit"
 	"github.com/F3dosik/metalert/internal/handler"
 	"github.com/F3dosik/metalert/internal/repository"
+	"github.com/F3dosik/metalert/internal/service"
 	"github.com/F3dosik/metalert/pkg/models"
 )
-
-// noopDispatcher — заглушка аудит-диспетчера, не делающая ничего.
-func newNoopDispatcher() *audit.AuditDispatcher {
-	return audit.NewAuditDispatcher(zap.NewNop().Sugar())
-}
 
 // newRouter собирает chi-роутер с хендлерами сервера метрик.
 func newRouter(storage *repository.MemMetricsStorage) http.Handler {
 	logger, _ := zap.NewDevelopment()
 	sugar := logger.Sugar()
-	dispatcher := newNoopDispatcher()
+
+	svc := service.NewMetricsService(storage, nil, false, sugar)
 
 	r := chi.NewRouter()
-	r.Post("/update/{metType}/{metName}/{metValue}", handler.UpdateHandler(storage, dispatcher, sugar))
-	r.Post("/update/", handler.UpdateJSONHandler(storage, dispatcher, sugar, false))
-	r.Post("/updates/", handler.UpdatesJSONHandler(storage, dispatcher, sugar, false))
-	r.Get("/value/{metType}/{metName}", handler.ValueHandler(storage))
-	r.Post("/value/", handler.ValueJSONHandler(storage, sugar))
+	r.Post("/update/{metType}/{metName}/{metValue}", handler.UpdateHandler(svc, sugar))
+	r.Post("/update/", handler.UpdateJSONHandler(svc, sugar))
+	r.Post("/updates/", handler.UpdatesJSONHandler(svc, sugar))
+	r.Get("/value/{metType}/{metName}", handler.ValueHandler(svc))
+	r.Post("/value/", handler.ValueJSONHandler(svc, sugar))
 
 	return r
 }

@@ -1,27 +1,34 @@
 package agent
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/F3dosik/metalert/internal/crypto"
+	pb "github.com/F3dosik/metalert/internal/proto"
 	"github.com/F3dosik/metalert/pkg/compression"
 	"github.com/F3dosik/metalert/pkg/models"
 )
 
 // Sender отвечает за отправку метрик на сервер.
 //
-// Поддерживает два режима через [Sender.SendMetrics]:
-//   - "URL" — каждая метрика отдельным POST /update/{type}/{name}/{value}
+// Поддерживает три режима через [Sender.SendMetrics]:
+//   - "URL"  — каждая метрика отдельным POST /update/{type}/{name}/{value}
 //   - "JSON" — все метрики одним POST /updates/ (опционально gzip)
+//   - "GRPC" — батч метрик через gRPC UpdateMetrics
 type Sender struct {
 	// ServerURL — базовый адрес сервера метрик, например "http://localhost:8080".
 	ServerURL string
@@ -29,21 +36,79 @@ type Sender struct {
 	// Client — HTTP-клиент resty с настроенным таймаутом.
 	Client *resty.Client
 
-	// CryptoKey -публичный ключ для поддержки асимметричного шифрования.
+	// CryptoKey — публичный ключ для поддержки асимметричного шифрования.
 	CryptoKey *rsa.PublicKey
+
+	// LocalIP — IP-адрес хоста агента, передаётся в заголовке X-Real-IP / gRPC metadata.
+	LocalIP string
+
+	// grpcClient — клиент gRPC MetricsService (nil, если gRPC не настроен).
+	grpcClient pb.MetricsClient
 }
 
-// NewSender создаёт Sender, настроенный на отправку метрик по адресу serverURL.
+// NewSender создаёт Sender, настроенный на отправку метрик.
 // Таймаут HTTP-запросов — 5 секунд.
-func NewSender(serverURL string, publicKey *rsa.PublicKey) *Sender {
+// Если grpcEndpoint не пустой, создаётся ленивое gRPC-соединение.
+func NewSender(serverURL, grpcEndpoint string, publicKey *rsa.PublicKey) *Sender {
 	client := resty.New()
 	client.SetTimeout(5 * time.Second)
 
-	return &Sender{
+	// Настройка политики по ретраям
+	client.SetRetryCount(3)
+	client.SetRetryWaitTime(1 * time.Second)
+	client.SetRetryMaxWaitTime(10 * time.Second)
+	client.AddRetryCondition(func(r *resty.Response, err error) bool {
+		// Повторять при сетевых ошибках
+		if err != nil {
+			return true
+		}
+		// Повторять при ошибках 5xx
+		if r.StatusCode() >= 500 {
+			return true
+		}
+		// Повторять при 408 (Request Timeout), 429 (Too Many Requests)
+		return r.StatusCode() == http.StatusRequestTimeout || r.StatusCode() == http.StatusTooManyRequests
+	})
+
+	s := &Sender{
 		ServerURL: serverURL,
 		Client:    client,
 		CryptoKey: publicKey,
+		LocalIP:   resolveLocalIP(serverURL),
 	}
+
+	if grpcEndpoint != "" {
+		conn, err := grpc.NewClient(grpcEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Printf("Warning: failed to create gRPC client: %v", err)
+		} else {
+			s.grpcClient = pb.NewMetricsClient(conn)
+		}
+	}
+
+	return s
+}
+
+// resolveLocalIP определяет локальный IP-адрес, используемый для соединения с сервером.
+// Использует UDP-соединение (без отправки пакетов) для выбора нужного интерфейса.
+func resolveLocalIP(serverURL string) string {
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		return ""
+	}
+	host := parsed.Host
+	if host == "" {
+		return ""
+	}
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		host = host + ":80"
+	}
+	conn, err := net.Dial("udp", host)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
 
 // SendMetrics отправляет все метрики из memMetrics на сервер.
@@ -62,6 +127,8 @@ func (s *Sender) SendMetrics(memMetrics *Metrics, sendType string, compress bool
 		s.sendMetricsIndividually(memMetrics)
 	case "JSON":
 		s.sendMetricsBatch(memMetrics, compress)
+	case "GRPC":
+		s.sendMetricsGRPC(memMetrics)
 	default:
 		log.Printf("Неизвестный тип отправки: %s", sendType)
 	}
@@ -170,6 +237,8 @@ func (s *Sender) sendMetricJSON(metrics []models.Metric, compress bool) error {
 		req.SetHeader("Content-Encoding", "gzip")
 	}
 
+	req.SetHeader("X-Real-IP", s.LocalIP)
+
 	resp, err := req.Post(fullURL)
 	if err != nil {
 		return fmt.Errorf("ошибка выполнения запроса: %w", err)
@@ -205,6 +274,49 @@ func (s *Sender) prepareURL(path string) string {
 		fullURL = parsed.String()
 	}
 	return fullURL
+}
+
+// sendMetricsGRPC отправляет все метрики батчем через gRPC UpdateMetrics.
+// IP-адрес агента передаётся в метаданных запроса с ключом x-real-ip.
+func (s *Sender) sendMetricsGRPC(memMetrics *Metrics) {
+	if s.grpcClient == nil {
+		log.Printf("gRPC клиент не инициализирован")
+		return
+	}
+
+	pbMetrics := make([]*pb.Metric, 0, len(memMetrics.Gauges)+len(memMetrics.Counters))
+	for id, v := range memMetrics.Gauges {
+		id, v := id, v
+		val := float64(v)
+		mtype := pb.Metric_GAUGE
+		pbMetrics = append(pbMetrics, pb.Metric_builder{
+			Id:    &id,
+			Type:  &mtype,
+			Value: &val,
+		}.Build())
+	}
+	for id, d := range memMetrics.Counters {
+		id, d := id, d
+		delta := int64(d)
+		mtype := pb.Metric_COUNTER
+		pbMetrics = append(pbMetrics, pb.Metric_builder{
+			Id:    &id,
+			Type:  &mtype,
+			Delta: &delta,
+		}.Build())
+	}
+
+	req := pb.UpdateMetricsRequest_builder{Metrics: pbMetrics}.Build()
+
+	md := metadata.Pairs("x-real-ip", s.LocalIP)
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+	if _, err := s.grpcClient.UpdateMetrics(ctx, req); err != nil {
+		log.Printf("gRPC UpdateMetrics error: %v", err)
+		return
+	}
+
+	log.Printf("gRPC: отправлено %d метрик", len(pbMetrics))
 }
 
 func (s *Sender) encryptIfNeeded(data []byte) ([]byte, bool, error) {

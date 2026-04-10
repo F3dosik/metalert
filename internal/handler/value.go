@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert/internal/repository"
 	"github.com/F3dosik/metalert/internal/service"
 	"github.com/F3dosik/metalert/pkg/models"
 )
@@ -17,27 +16,21 @@ import (
 //
 // Маршрут: GET /value/{metType}/{metName}
 //
-// Параметры пути:
-//   - metType — тип метрики ("gauge" или "counter")
-//   - metName — имя метрики
-//
 // При успехе возвращает 200 OK с текстовым значением метрики.
 // При неизвестном типе — 400 Bad Request.
 // При отсутствии метрики — 404 Not Found.
-func ValueHandler(storage repository.MetricsStorage) http.HandlerFunc {
+func ValueHandler(svc service.MetricsService) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		value(rw, r, storage)
+		value(rw, r, svc)
 	}
 }
 
-func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsStorage) {
-	var metName string
-	ctx := r.Context()
+func value(rw http.ResponseWriter, r *http.Request, svc service.MetricsService) {
 	metType := models.MetricType(chi.URLParam(r, "metType"))
-	metName = chi.URLParam(r, "metName")
+	metName := chi.URLParam(r, "metName")
+	ctx := r.Context()
 
-	err := service.ValidateMetricType(metType)
-	if err != nil {
+	if err := service.ValidateMetricType(metType); err != nil {
 		http.Error(rw, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -45,7 +38,7 @@ func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 	var message string
 	switch metType {
 	case models.TypeGauge:
-		val, err := storage.GetGauge(ctx, metName)
+		val, err := svc.GetGauge(ctx, metName)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusNotFound)
 			return
@@ -53,7 +46,7 @@ func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 		message = strconv.FormatFloat(float64(val), 'f', -1, 64)
 
 	case models.TypeCounter:
-		val, err := storage.GetCounter(ctx, metName)
+		val, err := svc.GetCounter(ctx, metName)
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusNotFound)
 			return
@@ -72,25 +65,21 @@ func value(rw http.ResponseWriter, r *http.Request, storage repository.MetricsSt
 //	{"id": "cpu", "type": "gauge"}
 //	{"id": "requests", "type": "counter"}
 //
-// Возвращает тот же объект с заполненным полем Value (для gauge) или Delta (для counter):
-//
-//	{"id": "cpu", "type": "gauge", "value": 72.5}
-//
+// Возвращает тот же объект с заполненным полем Value (для gauge) или Delta (для counter).
 // При невалидных данных — 400 Bad Request.
 // При отсутствии метрики — 404 Not Found.
-func ValueJSONHandler(storage repository.MetricsStorage, logger *zap.SugaredLogger) http.HandlerFunc {
+func ValueJSONHandler(svc service.MetricsService, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		valueJSON(w, r, storage, logger)
+		valueJSON(w, r, svc, logger)
 	}
 }
 
-func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.MetricsStorage, logger *zap.SugaredLogger) {
+func valueJSON(w http.ResponseWriter, r *http.Request, svc service.MetricsService, logger *zap.SugaredLogger) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric
 	ctx := r.Context()
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&metric); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&metric); err != nil {
 		logger.Debug("cannot decode metric JSON body", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -102,26 +91,26 @@ func valueJSON(w http.ResponseWriter, r *http.Request, storage repository.Metric
 		return
 	}
 
-	message := metric
+	response := metric
 	switch metric.MType {
 	case models.TypeGauge:
-		val, err := storage.GetGauge(ctx, metric.ID)
+		val, err := svc.GetGauge(ctx, metric.ID)
 		if err != nil {
 			logger.Debug("cannot GetGauge", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		message.Value = &val
+		response.Value = &val
 
 	case models.TypeCounter:
-		val, err := storage.GetCounter(ctx, metric.ID)
+		val, err := svc.GetCounter(ctx, metric.ID)
 		if err != nil {
 			logger.Debug("cannot GetCounter", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		message.Delta = &val
+		response.Delta = &val
 	}
 
-	RespondJSONOK(w, message)
+	RespondJSONOK(w, response)
 }

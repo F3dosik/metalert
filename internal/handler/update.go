@@ -1,20 +1,15 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
-	"time"
-
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	"github.com/F3dosik/metalert/internal/audit"
-	"github.com/F3dosik/metalert/internal/repository"
 	"github.com/F3dosik/metalert/internal/service"
 	"github.com/F3dosik/metalert/pkg/models"
 )
@@ -30,39 +25,23 @@ import (
 //
 // При успехе возвращает 200 OK с текстовым подтверждением.
 // При ошибке валидации — 400 Bad Request или 404 Not Found.
-func UpdateHandler(storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher, logger *zap.SugaredLogger) http.HandlerFunc {
+func UpdateHandler(svc service.MetricsService, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		update(w, r, storage, dispatcher, logger)
+		update(w, r, svc, logger)
 	}
 }
 
-func update(
-	w http.ResponseWriter, r *http.Request,
-	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
-	logger *zap.SugaredLogger,
-) {
-	var metName, metValue string
-
+func update(w http.ResponseWriter, r *http.Request, svc service.MetricsService, logger *zap.SugaredLogger) {
 	metType := models.MetricType(chi.URLParam(r, "metType"))
-	metName = chi.URLParam(r, "metName")
-	metValue = chi.URLParam(r, "metValue")
+	metName := chi.URLParam(r, "metName")
+	metValue := chi.URLParam(r, "metValue")
 
-	value, err := service.CheckAndParseValue(metType, metName, metValue)
-	if err != nil {
+	if err := svc.Update(r.Context(), metType, metName, metValue, getIP(r)); err != nil {
 		handleServiceError(w, logger, err)
 		return
 	}
 
-	service.UpdateMetric(r.Context(), storage, metName, value)
-
-	go dispatcher.Publish(audit.AuditEvent{
-		Ts:        time.Now().Unix(),
-		Metrics:   []string{metName},
-		IPAddress: getIP(r),
-	})
-
-	message := fmt.Sprint("Метрика ", metName, " успешно обновлена\r\n")
-	RespondTextOK(w, message)
+	RespondTextOK(w, fmt.Sprint("Метрика ", metName, " успешно обновлена\r\n"))
 }
 
 // UpdateJSONHandler возвращает HTTP-хендлер для обновления одной метрики через JSON.
@@ -74,24 +53,14 @@ func update(
 //	{"id": "cpu", "type": "gauge", "value": 72.5}
 //	{"id": "requests", "type": "counter", "delta": 1}
 //
-// При asyncSave=true после обновления асинхронно вызывает Save() у хранилища,
-// если оно реализует интерфейс repository.Savable.
-//
 // При успехе возвращает 200 OK. При ошибке — 400 Bad Request.
-func UpdateJSONHandler(
-	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
-	logger *zap.SugaredLogger, asyncSave bool,
-) http.HandlerFunc {
+func UpdateJSONHandler(svc service.MetricsService, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updateJSON(w, r, storage, dispatcher, logger, asyncSave)
+		updateJSON(w, r, svc, logger)
 	}
 }
 
-func updateJSON(
-	w http.ResponseWriter, r *http.Request,
-	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
-	logger *zap.SugaredLogger, saveOnUpdate bool,
-) {
+func updateJSON(w http.ResponseWriter, r *http.Request, svc service.MetricsService, logger *zap.SugaredLogger) {
 	logger.Debug("decoding request")
 
 	var metric models.Metric
@@ -101,30 +70,13 @@ func updateJSON(
 		return
 	}
 
-	if err := updateMetrics(r.Context(), storage, []models.Metric{metric}); err != nil {
+	if err := svc.UpdateMany(r.Context(), []models.Metric{metric}, getIP(r)); err != nil {
 		handleServiceError(w, logger, err)
 		return
 	}
 
-	go dispatcher.Publish(audit.AuditEvent{
-		Ts:        time.Now().Unix(),
-		Metrics:   metricNames([]models.Metric{metric}),
-		IPAddress: getIP(r),
-	})
-
-	if saveOnUpdate {
-		if s, ok := storage.(repository.Savable); ok {
-			go func() {
-				if err := s.Save(); err != nil {
-					logger.Warnw("error saving metrics", "error", err)
-				}
-			}()
-		}
-	}
-
 	logger.Debug("sending HTTP 200 response")
-	message := fmt.Sprint("Метрика ", metric.ID, " успешно обновлена\r\n")
-	RespondTextOK(w, message)
+	RespondTextOK(w, fmt.Sprint("Метрика ", metric.ID, " успешно обновлена\r\n"))
 }
 
 // UpdatesJSONHandler возвращает HTTP-хендлер для пакетного обновления метрик через JSON.
@@ -138,25 +90,14 @@ func updateJSON(
 //	  {"id": "requests", "type": "counter", "delta": 10}
 //	]
 //
-// Для хранилища типа DBMetricsStorage все метрики обновляются в одной транзакции.
-// При asyncSave=true после обновления асинхронно вызывает Save() у хранилища,
-// если оно реализует интерфейс repository.Savable.
-//
 // При успехе возвращает 200 OK. При пустом массиве или ошибке — 400 Bad Request.
-func UpdatesJSONHandler(
-	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
-	logger *zap.SugaredLogger, asyncSave bool,
-) http.HandlerFunc {
+func UpdatesJSONHandler(svc service.MetricsService, logger *zap.SugaredLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		updatesJSON(w, r, storage, dispatcher, logger, asyncSave)
+		updatesJSON(w, r, svc, logger)
 	}
 }
 
-func updatesJSON(
-	w http.ResponseWriter, r *http.Request,
-	storage repository.MetricsStorage, dispatcher *audit.AuditDispatcher,
-	logger *zap.SugaredLogger, saveOnUpdate bool,
-) {
+func updatesJSON(w http.ResponseWriter, r *http.Request, svc service.MetricsService, logger *zap.SugaredLogger) {
 	logger.Debug("decoding request")
 
 	var metrics []models.Metric
@@ -169,37 +110,14 @@ func updatesJSON(
 		http.Error(w, "empty metrics array", http.StatusBadRequest)
 		return
 	}
-	if err := updateMetrics(r.Context(), storage, metrics); err != nil {
+
+	if err := svc.UpdateMany(r.Context(), metrics, getIP(r)); err != nil {
 		handleServiceError(w, logger, err)
 		return
 	}
 
-	go dispatcher.Publish(audit.AuditEvent{
-		Ts:        time.Now().Unix(),
-		Metrics:   metricNames(metrics),
-		IPAddress: getIP(r),
-	})
-
-	if saveOnUpdate {
-		if s, ok := storage.(repository.Savable); ok {
-			go func() {
-				if err := s.Save(); err != nil {
-					logger.Warnw("error saving metrics", "error", err)
-				}
-			}()
-		}
-	}
 	logger.Debug("sending HTTP 200 response")
-	message := fmt.Sprint("Успешно обновлено ", len(metrics), " метрик\r\n")
-	RespondTextOK(w, message)
-}
-
-func metricNames(metrics []models.Metric) []string {
-	names := make([]string, len(metrics))
-	for i, m := range metrics {
-		names[i] = m.ID
-	}
-	return names
+	RespondTextOK(w, fmt.Sprint("Успешно обновлено ", len(metrics), " метрик\r\n"))
 }
 
 func getIP(r *http.Request) string {
@@ -208,38 +126,6 @@ func getIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return ip
-}
-
-func updateMetrics(ctx context.Context, storage repository.MetricsStorage, metrics []models.Metric) error {
-	for _, metric := range metrics {
-		if err := validateMetric(metric); err != nil {
-			return err
-		}
-	}
-
-	switch s := storage.(type) {
-	case *repository.DBMetricsStorage:
-		if err := s.UpdateMetricTx(ctx, metrics); err != nil {
-			return err
-		}
-	default:
-		for _, metric := range metrics {
-			if err := service.UpdateMetricFromStruct(ctx, s, metric); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func validateMetric(metric models.Metric) error {
-	if err := metric.ValidateMeta(); err != nil {
-		return err
-	}
-	if err := metric.ValidateValue(); err != nil {
-		return err
-	}
-	return nil
 }
 
 // handleServiceError переводит ошибки сервисного слоя в соответствующие HTTP-ответы:

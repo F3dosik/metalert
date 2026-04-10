@@ -222,6 +222,11 @@ func (d *DBMetricsStorage) GetAllMetrics(ctx context.Context) ([]models.Metric, 
 // Для counter прибавляет Delta к существующему значению.
 // При ошибке транзакция откатывается.
 // Используется хендлером [handler.UpdatesJSONHandler] для пакетного обновления.
+// UpdateMany обновляет набор метрик в одной транзакции.
+func (d *DBMetricsStorage) UpdateMany(ctx context.Context, metrics []models.Metric) error {
+	return d.UpdateMetricTx(ctx, metrics)
+}
+
 func (d *DBMetricsStorage) UpdateMetricTx(ctx context.Context, metrics []models.Metric) error {
 	return withRetry(ctx, func() error {
 		tx, err := d.db.BeginTx(ctx, nil)
